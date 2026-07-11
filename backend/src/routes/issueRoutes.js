@@ -1,0 +1,32 @@
+const express = require('express');
+const {
+  listIssues,
+  listMyIssues,
+  listAssignedIssues,
+  getIssueById,
+  reportPublicIssue,
+  assignIssue,
+  updateIssueStatus,
+  addMaintenanceRecord,
+  triageIssue,
+  claimIssue,
+  getTechnicianRecommendations,
+} = require('../controllers/issueController');
+const { protect, authorizeRoles } = require('../middleware/auth');
+const { uploadEvidence } = require('../middleware/upload');
+
+const router = express.Router();
+
+router.post('/public/:code/report', uploadEvidence.array('evidence', 5), reportPublicIssue);
+router.post('/triage', triageIssue);
+router.get('/', protect, listIssues);
+router.get('/my', protect, listMyIssues);
+router.get('/assigned', protect, listAssignedIssues);
+router.get('/:id', protect, getIssueById);
+router.get('/:id/recommendations', protect, authorizeRoles('admin'), getTechnicianRecommendations);
+router.patch('/:id/assign', protect, authorizeRoles('admin'), assignIssue);
+router.patch('/:id/status', protect, updateIssueStatus);
+router.patch('/:id/claim', protect, authorizeRoles('technician', 'admin'), claimIssue);
+router.post('/:id/maintenance', protect, authorizeRoles('admin', 'technician'), addMaintenanceRecord);
+
+module.exports = router;
