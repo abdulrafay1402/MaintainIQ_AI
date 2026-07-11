@@ -157,6 +157,19 @@ export default function TechnicianTasksPage() {
               </p>
             </div>
 
+            {selected.evidence?.length > 0 && (
+              <div>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-350">Evidence Photos</span>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {selected.evidence.map((url, index) => (
+                    <a key={index} href={url} target="_blank" rel="noreferrer">
+                      <img src={url} alt={`Evidence ${index + 1}`} className="h-16 w-16 rounded-xl border border-slate-200 object-cover dark:border-slate-800" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Admin Instructions & Activity logs */}
             {selected.timeline && selected.timeline.length > 0 && (
               <div className="mt-3">

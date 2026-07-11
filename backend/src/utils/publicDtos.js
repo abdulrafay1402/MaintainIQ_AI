@@ -47,6 +47,12 @@ const toReporterIssueView = (issue) => ({
     _id: issue.assignedTechnician._id,
     name: issue.assignedTechnician.name,
   } : null,
+  timeline: (issue.timeline || []).map((entry) => ({
+    fromStatus: entry.fromStatus,
+    toStatus: entry.toStatus,
+    actorName: entry.actorName,
+    createdAt: entry.createdAt,
+  })),
 });
 
 module.exports = {

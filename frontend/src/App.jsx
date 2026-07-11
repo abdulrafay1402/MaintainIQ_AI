@@ -7,6 +7,7 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminEquipmentPage from './pages/admin/AdminEquipmentPage';
 import AdminComplaintsPage from './pages/admin/AdminComplaintsPage';
 import AdminStaffPage from './pages/admin/AdminStaffPage';
+import { AssetLabelPage, AssetLabelSheetPage } from './pages/admin/AssetLabelPage';
 import TechnicianDashboardPage from './pages/technician/TechnicianDashboardPage';
 import TechnicianTasksPage from './pages/technician/TechnicianTasksPage';
 import StudentDashboardPage from './pages/student/StudentDashboardPage';
@@ -23,6 +24,10 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/public/assets/:code" element={<PublicAssetPage />} />
+
+      {/* Print-ready QR label pages (admin only, outside the dashboard shell for clean printing) */}
+      <Route path="/admin/equipment/labels" element={<ProtectedRoute allowedRoles={['admin']}><AssetLabelSheetPage /></ProtectedRoute>} />
+      <Route path="/admin/equipment/:id/label" element={<ProtectedRoute allowedRoles={['admin']}><AssetLabelPage /></ProtectedRoute>} />
 
       {/* Protected routes wrapped in DashboardLayout */}
       <Route

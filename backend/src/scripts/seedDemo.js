@@ -32,6 +32,7 @@ const seed = async () => {
       password: technicianPassword,
       role: 'technician',
       isActive: true,
+      expertise: ['Electronics / IT', 'Electrical'],
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );

@@ -13,6 +13,7 @@ export default function PublicAssetPage() {
   const currentUser = auth?.user;
 
   const [suggestion, setSuggestion] = useState(null);
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
   const { register, handleSubmit, watch, reset, setValue, formState: { isSubmitting } } = useForm({
     defaultValues: {
       title: '',
@@ -53,11 +54,20 @@ export default function PublicAssetPage() {
   });
 
   const reportMutation = useMutation({
-    mutationFn: async (payload) => (await api.post(`/issues/public/${code}/report`, payload)).data,
+    mutationFn: async (payload) => {
+      const formData = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        formData.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+      });
+      evidenceFiles.forEach((file) => formData.append('evidence', file));
+      return (await api.post(`/issues/public/${code}/report`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+    },
     onSuccess: (data) => {
       toast.success(`Issue submitted: ${data.issue.issueNumber}`);
       reset();
       setSuggestion(null);
+      setEvidenceFiles([]);
       assetQuery.refetch();
     },
     onError: (error) => toast.error(error?.response?.data?.message || 'Failed to submit issue'),
@@ -65,6 +75,18 @@ export default function PublicAssetPage() {
 
   const asset = assetQuery.data?.asset;
   const issues = assetQuery.data?.recentIssues || [];
+  const isRetired = asset?.status === 'Retired';
+
+  const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : 'N/A');
+
+  const handleEvidenceChange = (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 5);
+    const valid = files.filter((file) => file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024);
+    if (valid.length < files.length) {
+      toast.error('Only images up to 5MB are allowed');
+    }
+    setEvidenceFiles(valid);
+  };
 
   const handleGenerateTriage = async () => {
     if (!description.trim()) {
@@ -123,13 +145,31 @@ export default function PublicAssetPage() {
           <StatusBadge value={asset.status} />
           <StatusBadge value={asset.condition} />
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm dark:bg-slate-950 sm:max-w-md">
+          <div>
+            <span className="block text-xs text-slate-400">Last service</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{formatDate(asset.lastServiceDate)}</span>
+          </div>
+          <div>
+            <span className="block text-xs text-slate-400">Next service due</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{formatDate(asset.nextServiceDate)}</span>
+          </div>
+        </div>
         <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Public URL: {publicUrl}</p>
       </section>
+
+      {isRetired ? (
+        <section className="rounded-[2rem] border border-amber-300 bg-amber-50 p-6 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <h2 className="text-lg font-semibold">⚠️ This asset has been retired</h2>
+          <p className="mt-1 text-sm">It is no longer in active service. Its record and history remain readable, but new issues cannot be reported against it. Contact the maintenance office if you believe this is a mistake.</p>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-xl font-semibold">Report issue</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
+          {isRetired ? <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Reporting is disabled because this asset is retired.</p> : null}
+          {!isRetired ? <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
             <textarea className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" rows={4} placeholder="Describe the fault" {...register('description', { required: true })} />
             <div className="grid gap-4 md:grid-cols-2">
               <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Suggested / manual title" {...register('title')} />
@@ -153,11 +193,27 @@ export default function PublicAssetPage() {
               <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Student ID (optional)" {...register('studentId')} />
               <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950 md:col-span-2" placeholder="Email (optional)" {...register('reporterEmail')} />
             </div>
+            <div>
+              <label className="grid gap-2 text-sm font-medium">
+                Evidence photos (optional, up to 5 images, 5MB each)
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleEvidenceChange} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-ink-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white dark:border-slate-800 dark:bg-slate-950 dark:file:bg-white dark:file:text-ink-900" />
+              </label>
+              {evidenceFiles.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {evidenceFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="relative">
+                      <img src={URL.createObjectURL(file)} alt={file.name} className="h-20 w-20 rounded-xl border border-slate-200 object-cover dark:border-slate-800" />
+                      <button type="button" onClick={() => setEvidenceFiles(evidenceFiles.filter((_, i) => i !== index))} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-600 text-xs text-white">✕</button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={handleGenerateTriage} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">Generate AI triage</button>
-              <button disabled={isSubmitting || reportMutation.isPending} type="submit" className="rounded-2xl bg-ink-900 px-4 py-3 text-white dark:bg-white dark:text-ink-900">Submit issue</button>
+              <button disabled={isSubmitting || reportMutation.isPending} type="submit" className="rounded-2xl bg-ink-900 px-4 py-3 text-white dark:bg-white dark:text-ink-900">{reportMutation.isPending ? 'Submitting...' : 'Submit issue'}</button>
             </div>
-          </form>
+          </form> : null}
         </section>
 
         <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">

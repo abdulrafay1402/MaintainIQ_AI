@@ -385,15 +385,20 @@ test('health route works', async () => {
 test('auth register/login/me/logout flow works', async () => {
   await request(app)
     .post('/api/auth/register')
-    .send({ name: 'New Admin', email: 'newadmin@test.local', password: 'Password123', role: 'admin' })
+    .send({ name: 'Sneaky Admin', email: 'sneaky@test.local', password: 'Password123', role: 'admin' })
+    .expect(403);
+
+  await request(app)
+    .post('/api/auth/register')
+    .send({ name: 'New Student', email: 'newstudent@test.local', password: 'Password123', studentId: 'STU-9001' })
     .expect(201);
 
   const loginResponse = await request(app)
     .post('/api/auth/login')
-    .send({ email: 'newadmin@test.local', password: 'Password123' })
+    .send({ email: 'newstudent@test.local', password: 'Password123' })
     .expect(200);
 
-  assert.equal(loginResponse.body.user.email, 'newadmin@test.local');
+  assert.equal(loginResponse.body.user.email, 'newstudent@test.local');
   assert.ok(loginResponse.headers['set-cookie']);
 
   const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
@@ -403,7 +408,7 @@ test('auth register/login/me/logout flow works', async () => {
     .set('Cookie', cookie)
     .expect(200);
 
-  assert.equal(meResponse.body.user.email, 'newadmin@test.local');
+  assert.equal(meResponse.body.user.email, 'newstudent@test.local');
 
   await request(app)
     .post('/api/auth/logout')

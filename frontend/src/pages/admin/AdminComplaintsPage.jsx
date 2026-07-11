@@ -15,7 +15,24 @@ export default function AdminComplaintsPage() {
   const [status, setStatus] = useState('Inspection Started');
   const [note, setNote] = useState('');
 
-  const { data: issues = [] } = useQuery({ queryKey: ['issues'], queryFn: async () => (await api.get('/issues')).data.issues });
+  const [searchFilter, setSearchFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [technicianFilter, setTechnicianFilter] = useState('');
+
+  const { data: issues = [] } = useQuery({
+    queryKey: ['issues', searchFilter, statusFilter, priorityFilter, categoryFilter, technicianFilter],
+    queryFn: async () => {
+      const params = {};
+      if (searchFilter) params.search = searchFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (priorityFilter) params.priority = priorityFilter;
+      if (categoryFilter) params.category = categoryFilter;
+      if (technicianFilter) params.assignedTechnician = technicianFilter;
+      return (await api.get('/issues', { params })).data.issues;
+    },
+  });
   const { data: technicians = [] } = useQuery({ queryKey: ['technicians'], queryFn: async () => (await api.get('/users/technicians')).data.technicians });
 
   const selected = useMemo(() => selectedIssue || issues[0] || null, [selectedIssue, issues]);
@@ -85,6 +102,26 @@ export default function AdminComplaintsPage() {
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
       <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-xl font-semibold">Complaint queue</h2>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <input value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} placeholder="Search title, number, asset code..." className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950 sm:col-span-2" />
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+            <option value="">All statuses</option>
+            {workflowStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+            <option value="">All priorities</option>
+            {['Low', 'Medium', 'High', 'Critical'].map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+            <option value="">All categories</option>
+            {['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'].map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select value={technicianFilter} onChange={(e) => setTechnicianFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+            <option value="">All technicians</option>
+            <option value="unassigned">Unassigned</option>
+            {technicians.map((tech) => <option key={tech._id} value={tech._id}>{tech.name}</option>)}
+          </select>
+        </div>
         <div className="mt-4 space-y-3">
           {issues.map((issue) => <button key={issue._id} onClick={() => { setSelectedIssue(issue); setTechnicianId(issue.assignedTechnician?._id || ''); setStatus(issue.status); setNote(issue.maintenanceNotes || ''); }} className={`w-full rounded-2xl border p-4 text-left transition ${selected?._id === issue._id ? 'border-ink-900 bg-slate-50 dark:bg-slate-950' : 'border-slate-200 dark:border-slate-800'}`}>
             <div className="flex items-center justify-between gap-3">
@@ -95,6 +132,7 @@ export default function AdminComplaintsPage() {
               <StatusBadge value={issue.status} />
             </div>
           </button>)}
+          {issues.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">No complaints match the current filters.</p> : null}
         </div>
       </section>
 
@@ -105,6 +143,19 @@ export default function AdminComplaintsPage() {
             <h2 className="text-2xl font-semibold">{selected.title}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Reported by {selected.reporterName}</p>
           </div>
+
+          {selected.evidence?.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Evidence photos</p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {selected.evidence.map((url, index) => (
+                  <a key={index} href={url} target="_blank" rel="noreferrer">
+                    <img src={url} alt={`Evidence ${index + 1}`} className="h-20 w-20 rounded-xl border border-slate-200 object-cover dark:border-slate-800" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {selected.aiSuggestion && (
             <div className="rounded-3xl border border-violet-200 bg-violet-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/30 space-y-3">

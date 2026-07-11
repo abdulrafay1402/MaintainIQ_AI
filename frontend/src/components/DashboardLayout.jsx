@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -25,7 +26,22 @@ const menuByRole = {
 export default function DashboardLayout() {
   const auth = useAuth();
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const menu = menuByRole[auth.user?.role] || [];
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const { data: notificationData } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => (await api.get('/notifications')).data,
+    refetchInterval: 20000,
+  });
+  const notifications = notificationData?.notifications || [];
+  const unreadCount = notificationData?.unreadCount || 0;
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => api.patch('/notifications/read-all'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
 
   const isAdmin = auth.user?.role === 'admin';
   const { data: issues = [] } = useQuery({
@@ -46,6 +62,29 @@ export default function DashboardLayout() {
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-ink-500">MaintainIQ</p>
             <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{auth.user?.role === 'student' ? 'Student Portal' : auth.user?.role === 'technician' ? 'Technical Portal' : 'Admin Portal'}</h1>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{auth.user?.name}</p>
+          </div>
+          <div className="relative">
+            <button onClick={() => setShowNotifications(!showNotifications)} className="relative grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-lg dark:border-slate-800" aria-label="Notifications">
+              🔔
+              {unreadCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span> : null}
+            </button>
+            {showNotifications ? (
+              <div className="absolute right-0 z-30 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-soft dark:border-slate-800 dark:bg-slate-900 lg:left-0 lg:right-auto">
+                <div className="flex items-center justify-between px-1 pb-2">
+                  <p className="text-sm font-semibold">Notifications</p>
+                  {unreadCount > 0 ? <button onClick={() => markAllReadMutation.mutate()} className="text-xs font-medium text-ink-600 underline underline-offset-2 dark:text-ink-300">Mark all read</button> : null}
+                </div>
+                <div className="max-h-80 space-y-2 overflow-y-auto">
+                  {notifications.length > 0 ? notifications.slice(0, 15).map((item) => (
+                    <div key={item._id} className={`rounded-xl border p-3 text-xs ${item.isRead ? 'border-slate-100 text-slate-500 dark:border-slate-800' : 'border-ink-200 bg-ink-50/50 text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'}`}>
+                      <p className="font-semibold">{item.title}</p>
+                      <p className="mt-0.5">{item.message}</p>
+                      <p className="mt-1 text-[10px] text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
+                    </div>
+                  )) : <p className="px-1 py-4 text-center text-xs text-slate-500">No notifications yet.</p>}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

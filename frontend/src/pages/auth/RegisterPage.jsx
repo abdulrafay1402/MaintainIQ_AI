@@ -9,8 +9,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm({ defaultValues: { name: '', email: '', password: '', studentId: '', role: 'student', expertise: [] } });
-  const selectedRole = watch('role');
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ defaultValues: { name: '', email: '', password: '', studentId: '', role: 'student' } });
 
   const registerMutation = useMutation({
     mutationFn: async (values) => api.post('/auth/register', values),
@@ -53,11 +52,8 @@ export default function RegisterPage() {
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Join the professional maintenance management workspace.</p>
 
           <form onSubmit={handleSubmit((values) => registerMutation.mutateAsync(values))} className="mt-8 space-y-4">
-            <div>
-              <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950 text-slate-700 dark:text-slate-200" {...register('role', { required: true })}>
-                <option value="student">Student / Public Reporter</option>
-                <option value="technician">Technician / Worker</option>
-              </select>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+              Public sign-up creates a <strong>Student / Reporter</strong> account. Technician and admin accounts are created by an administrator from the Staff page.
             </div>
             <div>
               <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950" placeholder="Full name" {...register('name', { required: 'Name is required' })} />
@@ -73,25 +69,10 @@ export default function RegisterPage() {
               })} />
               {errors.email ? <p className="mt-1 text-xs text-rose-600">{errors.email.message}</p> : null}
             </div>
-            {selectedRole === 'technician' ? (
-              <div className="space-y-2 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Specialty Expertise Areas</p>
-                <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 dark:text-slate-300">
-                  {['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'].map((category) => (
-                    <label key={category} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" value={category} {...register('expertise')} className="rounded border-slate-300 text-ink-600 focus:ring-ink-500" />
-                      <span>{category}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {selectedRole === 'student' ? (
-              <div>
+            <div>
                 <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950" placeholder="Student ID" {...register('studentId', { required: 'Student ID is required' })} />
                 {errors.studentId ? <p className="mt-1 text-xs text-rose-600">{errors.studentId.message}</p> : null}
               </div>
-            ) : null}
             <div>
               <input type="password" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950" placeholder="Password" {...register('password', { required: 'Password is required', minLength: { value: 6, message: 'Minimum 6 characters' } })} />
               {errors.password ? <p className="mt-1 text-xs text-rose-600">{errors.password.message}</p> : null}

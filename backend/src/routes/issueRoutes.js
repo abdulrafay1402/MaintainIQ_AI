@@ -14,11 +14,12 @@ const {
 } = require('../controllers/issueController');
 const { protect, authorizeRoles } = require('../middleware/auth');
 const { uploadEvidence } = require('../middleware/upload');
+const { publicReportLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-router.post('/public/:code/report', uploadEvidence.array('evidence', 5), reportPublicIssue);
-router.post('/triage', triageIssue);
+router.post('/public/:code/report', publicReportLimiter, uploadEvidence.array('evidence', 5), reportPublicIssue);
+router.post('/triage', publicReportLimiter, triageIssue);
 router.get('/', protect, listIssues);
 router.get('/my', protect, listMyIssues);
 router.get('/assigned', protect, listAssignedIssues);

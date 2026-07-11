@@ -8,11 +8,21 @@ const { canTransitionIssue, nextAssetStatusForIssueStatus } = require('../servic
 const { buildTriage, generateMaintenanceSummary } = require('../services/triageService');
 const { findAssetByIdentifier } = require('../utils/assetLookup');
 const { toReporterIssueView } = require('../utils/publicDtos');
+const { notifyAdmins, notifyUser } = require('../services/notificationService');
 
 const buildIssueNumber = () => `ISU-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
 const addTimelineEntry = (issue, { fromStatus, toStatus, actor, actorName, note }) => {
   issue.timeline.push({ fromStatus, toStatus, actor, actorName, note });
+};
+
+// Notifications must never break the main workflow, so failures are logged and swallowed.
+const safeNotify = async (fn) => {
+  try {
+    await fn();
+  } catch (error) {
+    console.error('Notification error:', error.message);
+  }
 };
 
 const listIssues = asyncHandler(async (req, res) => {
@@ -156,6 +166,16 @@ const reportPublicIssue = asyncHandler(async (req, res) => {
     aiSuggestion,
   });
 
+  addTimelineEntry(issue, { fromStatus: null, toStatus: 'Reported', actorName: reporterName, note: 'Issue submitted from the public asset page' });
+  await issue.save();
+
+  await safeNotify(() => notifyAdmins({
+    type: 'issue_reported',
+    title: `New issue reported: ${issue.issueNumber}`,
+    message: `${reporterName} reported "${issue.title}" on asset ${asset.code} (${asset.name}).`,
+    relatedIssue: issue._id,
+  }));
+
   asset.status = 'Issue Reported';
   await asset.save();
 
@@ -184,8 +204,10 @@ const assignIssue = asyncHandler(async (req, res) => {
   }
 
   if (isRelease) {
+    const previousStatus = issue.status;
     issue.assignedTechnician = null;
     issue.status = 'Reported';
+    addTimelineEntry(issue, { fromStatus: previousStatus, toStatus: 'Reported', actor: req.user._id, actorName: req.user.name, note: 'Released to the shared technician pool' });
     await issue.save();
 
     const asset = await Asset.findById(issue.asset);
@@ -212,9 +234,19 @@ const assignIssue = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Selected user is not a technician');
   }
 
+  const previousStatus = issue.status;
   issue.assignedTechnician = technicianId;
   issue.status = 'Assigned';
+  addTimelineEntry(issue, { fromStatus: previousStatus, toStatus: 'Assigned', actor: req.user._id, actorName: req.user.name, note: `Assigned to ${technician.name}` });
   await issue.save();
+
+  await safeNotify(() => notifyUser({
+    userId: technician._id,
+    type: 'issue_assigned',
+    title: `Issue assigned: ${issue.issueNumber}`,
+    message: `You have been assigned "${issue.title}" (${issue.assetCode}).`,
+    relatedIssue: issue._id,
+  }));
 
   const asset = await Asset.findById(issue.asset);
   if (asset) {
@@ -261,6 +293,7 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Resolution note is required before resolving an issue');
   }
 
+  const previousStatus = issue.status;
   issue.status = status;
   if (note) {
     issue.maintenanceNotes = note;
@@ -271,8 +304,26 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
   if (status === 'Closed') {
     issue.closedAt = new Date();
   }
+  if (status === 'Rejected') {
+    issue.rejectedReason = note || 'Rejected without a stated reason';
+  }
+  if (status === 'Verified') {
+    issue.verifiedBy = req.user._id;
+    issue.verifiedAt = new Date();
+  }
+  addTimelineEntry(issue, { fromStatus: previousStatus, toStatus: status, actor: req.user._id, actorName: req.user.name, note });
 
   await issue.save();
+
+  if (status === 'Resolved' && issue.reporterId) {
+    await safeNotify(() => notifyUser({
+      userId: issue.reporterId,
+      type: 'issue_resolved',
+      title: `Issue resolved: ${issue.issueNumber}`,
+      message: `Your reported issue "${issue.title}" has been resolved.`,
+      relatedIssue: issue._id,
+    }));
+  }
 
   const asset = await Asset.findById(issue.asset);
   if (asset) {
@@ -319,6 +370,8 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'Only the assigned technician or an admin can record maintenance for this issue');
   }
 
+  const previousStatus = issue.status;
+
   if (!notes) {
     throw new ApiError(400, 'Maintenance notes are required');
   }
@@ -344,6 +397,7 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
   issue.workPerformed = workPerformed;
   issue.finalCondition = finalCondition;
   issue.durationHours = Number(durationHours) || 1;
+  addTimelineEntry(issue, { fromStatus: previousStatus, toStatus: 'Resolved', actor: req.user._id, actorName: req.user.name, note: notes });
 
   const asset = await Asset.findById(issue.asset);
 
@@ -394,6 +448,16 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     details: notes,
   });
 
+  if (issue.reporterId) {
+    await safeNotify(() => notifyUser({
+      userId: issue.reporterId,
+      type: 'issue_resolved',
+      title: `Issue resolved: ${issue.issueNumber}`,
+      message: `Your reported issue "${issue.title}" has been resolved. ${notes}`,
+      relatedIssue: issue._id,
+    }));
+  }
+
   res.status(201).json({ maintenanceRecord, issue });
 });
 
@@ -419,8 +483,10 @@ const claimIssue = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Issue is already assigned to a technician');
   }
 
+  const previousStatus = issue.status;
   issue.assignedTechnician = req.user._id;
   issue.status = 'Assigned';
+  addTimelineEntry(issue, { fromStatus: previousStatus, toStatus: 'Assigned', actor: req.user._id, actorName: req.user.name, note: 'Claimed from the shared pool' });
   await issue.save();
 
   const asset = await Asset.findById(issue.asset);

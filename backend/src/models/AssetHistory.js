@@ -49,4 +49,16 @@ assetHistorySchema.pre('findOneAndDelete', function () {
   throw new Error('Asset history entries are immutable and cannot be deleted');
 });
 
+assetHistorySchema.pre('updateMany', function () {
+  throw new Error('Asset history entries are immutable and cannot be updated');
+});
+
+assetHistorySchema.pre('deleteMany', function () {
+  throw new Error('Asset history entries are immutable and cannot be deleted');
+});
+
+assetHistorySchema.pre('replaceOne', function () {
+  throw new Error('Asset history entries are immutable and cannot be replaced');
+});
+
 module.exports = mongoose.model('AssetHistory', assetHistorySchema);

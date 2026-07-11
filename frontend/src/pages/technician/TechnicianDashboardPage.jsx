@@ -5,8 +5,16 @@ import StatusBadge from '../../components/StatusBadge';
 
 export default function TechnicianDashboardPage() {
   const { data: tasks = [] } = useQuery({ queryKey: ['assigned-issues'], queryFn: async () => (await api.get('/issues/assigned')).data.issues });
-  const completed = tasks.filter((issue) => ['Resolved', 'Verified', 'Closed'].includes(issue.status)).length;
-  const pending = tasks.filter((issue) => !['Resolved', 'Verified', 'Closed'].includes(issue.status)).length;
+  const completedTasks = tasks.filter((issue) => ['Resolved', 'Verified', 'Closed'].includes(issue.status));
+  const completed = completedTasks.length;
+  const pending = tasks.length - completed;
+
+  const repairDurations = completedTasks
+    .map((issue) => Number(issue.durationHours))
+    .filter((hours) => Number.isFinite(hours) && hours > 0);
+  const averageRepairTime = repairDurations.length
+    ? `${(repairDurations.reduce((sum, hours) => sum + hours, 0) / repairDurations.length).toFixed(1)} h`
+    : 'N/A';
 
   return <div className="space-y-6">
     <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
@@ -18,7 +26,7 @@ export default function TechnicianDashboardPage() {
       <StatCard label="Assigned tasks" value={tasks.length} />
       <StatCard label="Pending tasks" value={pending} />
       <StatCard label="Completed tasks" value={completed} />
-      <StatCard label="Average repair time" value="-" hint="Calculated after production data" />
+      <StatCard label="Average repair time" value={averageRepairTime} hint="Average duration of your completed repairs" />
     </div>
 
     <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">

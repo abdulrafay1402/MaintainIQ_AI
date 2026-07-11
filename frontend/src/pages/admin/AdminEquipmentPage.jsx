@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { QRCodeCanvas } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import api from '../../api';
@@ -18,21 +18,31 @@ export default function AdminEquipmentPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [technicianFilter, setTechnicianFilter] = useState('');
+  const qrRef = useRef(null);
 
   const { register, handleSubmit, reset, setValue, formState: { isSubmitting, errors } } = useForm({
-    defaultValues: { name: '', code: '', category: '', location: '', condition: 'Good', status: 'Operational', serialNumber: '', notes: '' },
+    defaultValues: { name: '', code: '', category: '', location: '', building: '', floor: '', roomNumber: '', condition: 'Good', status: 'Operational', serialNumber: '', assignedTechnician: '', purchaseDate: '', lastServiceDate: '', nextServiceDate: '', notes: '' },
   });
 
   const { data: assets = [] } = useQuery({
-    queryKey: ['assets', search, categoryFilter, statusFilter],
+    queryKey: ['assets', search, categoryFilter, statusFilter, locationFilter, technicianFilter],
     queryFn: async () => {
       const params = {};
       if (search) params.search = search;
       if (categoryFilter) params.category = categoryFilter;
       if (statusFilter) params.status = statusFilter;
+      if (locationFilter) params.location = locationFilter;
+      if (technicianFilter) params.assignedTechnician = technicianFilter;
       const response = await api.get('/assets', { params });
       return response.data.assets;
     },
+  });
+
+  const { data: technicians = [] } = useQuery({
+    queryKey: ['technicians'],
+    queryFn: async () => (await api.get('/users/technicians')).data.technicians,
   });
 
   const assetId = selectedAsset?._id;
@@ -78,10 +88,17 @@ export default function AdminEquipmentPage() {
   }, [assets, conditionFilter]);
 
   const onSubmitForm = (values) => {
+    const payload = { ...values };
+    ['purchaseDate', 'lastServiceDate', 'nextServiceDate'].forEach((key) => {
+      if (!payload[key]) delete payload[key];
+    });
+    if (!payload.assignedTechnician) {
+      payload.assignedTechnician = null;
+    }
     if (editingAssetId) {
-      updateMutation.mutate({ id: editingAssetId, payload: values });
+      updateMutation.mutate({ id: editingAssetId, payload });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate(payload);
     }
   };
 
@@ -94,13 +111,42 @@ export default function AdminEquipmentPage() {
     setValue('condition', asset.condition || 'Good');
     setValue('status', asset.status || 'Operational');
     setValue('serialNumber', asset.serialNumber || '');
+    setValue('building', asset.building || '');
+    setValue('floor', asset.floor || '');
+    setValue('roomNumber', asset.roomNumber || '');
+    setValue('assignedTechnician', asset.assignedTechnician?._id || asset.assignedTechnician || '');
+    setValue('purchaseDate', asset.purchaseDate ? asset.purchaseDate.slice(0, 10) : '');
+    setValue('lastServiceDate', asset.lastServiceDate ? asset.lastServiceDate.slice(0, 10) : '');
+    setValue('nextServiceDate', asset.nextServiceDate ? asset.nextServiceDate.slice(0, 10) : '');
     setValue('notes', asset.notes || '');
   };
 
+  const publicIdentifier = (asset) => asset?.publicId || asset?.code;
+
   const copyLink = async () => {
-    if (!selectedAsset?.code) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/public/assets/${selectedAsset.code}`);
+    if (!selectedAsset) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/public/assets/${publicIdentifier(selectedAsset)}`);
     toast.success('Public link copied');
+  };
+
+  const downloadQr = () => {
+    const canvas = qrRef.current?.querySelector('canvas');
+    if (!canvas || !selectedAsset) return;
+    const link = document.createElement('a');
+    link.download = `${selectedAsset.code}-qr.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    toast.success('QR downloaded');
+  };
+
+  const openLabelSheet = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (categoryFilter) params.set('category', categoryFilter);
+    if (statusFilter) params.set('status', statusFilter);
+    if (locationFilter) params.set('location', locationFilter);
+    if (technicianFilter) params.set('assignedTechnician', technicianFilter);
+    navigate(`/admin/equipment/labels?${params.toString()}`);
   };
 
   return <div className="space-y-6">
@@ -162,6 +208,28 @@ export default function AdminEquipmentPage() {
             </select>
             <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Serial number" {...register('serialNumber')} />
           </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Building (optional)" {...register('building')} />
+            <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Floor (optional)" {...register('floor')} />
+            <input className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" placeholder="Room number (optional)" {...register('roomNumber')} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="grid gap-1 text-xs font-medium text-slate-500">Purchase date
+              <input type="date" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" {...register('purchaseDate')} />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-500">Last service date
+              <input type="date" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" {...register('lastServiceDate')} />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-500">Next service date
+              <input type="date" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" {...register('nextServiceDate')} />
+            </label>
+          </div>
+          <label className="grid gap-1 text-xs font-medium text-slate-500">Assigned technician (optional)
+            <select className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" {...register('assignedTechnician')}>
+              <option value="">No default technician</option>
+              {technicians.map((tech) => <option key={tech._id} value={tech._id}>{tech.name} ({tech.email})</option>)}
+            </select>
+          </label>
           <textarea className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950" rows={4} placeholder="Notes" {...register('notes')} />
           <div className="flex gap-3">
             <button disabled={isSubmitting || createMutation.isPending || updateMutation.isPending} className="flex-1 rounded-2xl bg-ink-900 px-4 py-3 font-medium text-white dark:bg-white dark:text-ink-900">
@@ -184,12 +252,14 @@ export default function AdminEquipmentPage() {
             <h3 className="text-2xl font-semibold">{selectedAsset.name}</h3>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{selectedAsset.location}</p>
           </div>
-          {qrValue ? <div className="rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
+          {qrValue ? <div ref={qrRef} className="rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
             <QRCodeCanvas value={qrValue} size={180} includeMargin />
           </div> : null}
           <div className="flex flex-wrap gap-3">
             <button onClick={copyLink} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">Copy public link</button>
-            <a className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800 text-center" href={selectedAsset?.code ? `/public/assets/${selectedAsset.code}` : '#'} target="_blank" rel="noreferrer">Open public page</a>
+            <button onClick={downloadQr} className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">Download QR</button>
+            <Link to={`/admin/equipment/${selectedAsset._id}/label`} className="rounded-2xl border border-slate-200 px-4 py-3 text-center dark:border-slate-800">Print label</Link>
+            <a className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800 text-center" href={`/public/assets/${publicIdentifier(selectedAsset)}`} target="_blank" rel="noreferrer">Open public page</a>
             <button onClick={() => startEdit(selectedAsset)} className="rounded-2xl bg-ink-900 text-white px-4 py-3 dark:bg-white dark:text-ink-900 font-medium">Edit details</button>
           </div>
           <div className="flex items-center justify-between">
@@ -246,7 +316,36 @@ export default function AdminEquipmentPage() {
     </div>
 
     <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-xl font-semibold">Equipment list</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Equipment list</h2>
+        <button onClick={openLabelSheet} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium dark:border-slate-800">Bulk QR label sheet ({filteredAssets.length})</button>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, code, category..." className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950 md:col-span-3 xl:col-span-2" />
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+          <option value="">All categories</option>
+          {['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'].map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+          <option value="">All statuses</option>
+          {['Operational', 'Issue Reported', 'Under Inspection', 'Under Maintenance', 'Out of Service', 'Retired', 'Faulty'].map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <input value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} placeholder="Filter by location" className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950" />
+        <select value={technicianFilter} onChange={(e) => setTechnicianFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+          <option value="">All technicians</option>
+          <option value="unassigned">Unassigned</option>
+          {technicians.map((tech) => <option key={tech._id} value={tech._id}>{tech.name}</option>)}
+        </select>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <select value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value)} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+          <option value="">All conditions</option>
+          {['Good', 'Fair', 'Poor'].map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+        {(search || categoryFilter || statusFilter || conditionFilter || locationFilter || technicianFilter) ? (
+          <button onClick={() => { setSearch(''); setCategoryFilter(''); setStatusFilter(''); setConditionFilter(''); setLocationFilter(''); setTechnicianFilter(''); }} className="text-xs font-medium text-slate-500 underline underline-offset-4">Clear filters</button>
+        ) : null}
+      </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-950 dark:text-slate-400">
@@ -258,7 +357,7 @@ export default function AdminEquipmentPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {filteredAssets.map((asset) => <tr key={asset._id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-950" onClick={() => { setSelectedAsset(asset); setQrValue(`${window.location.origin}/public/assets/${asset.code}`); }}>
+            {filteredAssets.map((asset) => <tr key={asset._id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-950" onClick={() => { setSelectedAsset(asset); setQrValue(`${window.location.origin}/public/assets/${asset.publicId || asset.code}`); }}>
               <td className="px-4 py-3 font-medium">{asset.name}</td>
               <td className="px-4 py-3">{asset.code}</td>
               <td className="px-4 py-3">{asset.location}</td>
