@@ -143,7 +143,7 @@ const reportPublicIssue = asyncHandler(async (req, res) => {
   }
 
   const baseUrl = process.env.API_URL || `${req.protocol}://${req.get('host')}`;
-  const uploadedEvidence = (req.files || []).map((file) => `${baseUrl}/uploads/${file.filename}`);
+  const uploadedEvidence = (req.files || []).map((file) => `${baseUrl}/uploads/${file.path}`);
   const evidenceUrls = [...uploadedEvidence, ...(Array.isArray(evidence) ? evidence : [])];
 
   if (!title || !description || !category || !reporterName) {
