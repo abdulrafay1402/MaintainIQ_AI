@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [activeSection, setActiveSection] = useState('profile'); // 'profile' or 'password'
 
   useEffect(() => {
     if (auth.user) {
@@ -96,157 +97,185 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-8 md:grid-cols-3">
-        <div className="md:col-span-1">
-          <h3 className="text-lg font-bold">Profile Details</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Your name, department context, and contact details used in fault reports and assignments.
-          </p>
-        </div>
+      {/* Segmented controls for responsive form tabs */}
+      <div className="flex rounded-2xl bg-slate-100/80 p-1 border border-slate-200/50 dark:bg-slate-950/40 dark:border-slate-800/80 max-w-md mb-8">
+        <button
+          type="button"
+          onClick={() => setActiveSection('profile')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeSection === 'profile'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Edit Profile Info
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection('password')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeSection === 'password'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Change Password
+        </button>
+      </div>
 
-        <div className="md:col-span-2 rounded-[2rem] border border-slate-200 bg-white/60 p-8 shadow-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Full Name</label>
-                <input
-                  type="text"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
+      {activeSection === 'profile' ? (
+        <div className="grid gap-8 md:grid-cols-3">
+          <div className="md:col-span-1">
+            <h3 className="text-lg font-bold">Profile Details</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Your name, department context, and contact details used in fault reports and assignments.
+            </p>
+          </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Email Address (Read-only)</label>
-                <input
-                  type="email"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-100/50 px-4 py-3 text-sm outline-none text-slate-400 dark:border-slate-800 dark:bg-slate-950/20 cursor-not-allowed"
-                  value={auth.user?.email || ''}
-                  disabled
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Phone Number</label>
-                <input
-                  type="text"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="+1 (555) 000-0000"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Department</label>
-                <input
-                  type="text"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="Facilities Management"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <hr className="border-slate-200 dark:border-slate-800" />
-
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Security Preferences</h3>
-              
-              <div className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/30">
-                <input
-                  id="twoFactor"
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-ink-600 focus:ring-ink-500 dark:border-slate-800 dark:bg-slate-950 dark:checked:bg-ink-500 cursor-pointer"
-                  checked={twoFactorEnabled}
-                  onChange={(e) => setTwoFactorEnabled(e.target.checked)}
-                />
+          <div className="md:col-span-2 rounded-[2rem] border border-slate-200 bg-white/60 p-8 shadow-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid gap-6 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="twoFactor" className="text-sm font-bold block cursor-pointer select-none">
-                    Enable Two-Factor Authentication (2FA)
-                  </label>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    When enabled, a secure 6-digit verification code will be sent to your email address during login. You must submit this code to verify your identity.
-                  </p>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Full Name</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Email Address (Read-only)</label>
+                  <input
+                    type="email"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-100/50 px-4 py-3 text-sm outline-none text-slate-400 dark:border-slate-800 dark:bg-slate-950/20 cursor-not-allowed"
+                    value={auth.user?.email || ''}
+                    disabled
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Phone Number</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="+1 (555) 000-0000"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Department</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="Facilities Management"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                  />
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-end">
-              <button
-                disabled={updateProfileMutation.isPending}
-                className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
-              >
-                {updateProfileMutation.isPending ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div className="grid gap-8 md:grid-cols-3 mt-12">
-        <div className="md:col-span-1">
-          <h3 className="text-lg font-bold">Change Password</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Secure your account by updating your login password regularly.
-          </p>
-        </div>
-
-        <div className="md:col-span-2 rounded-[2rem] border border-slate-200 bg-white/60 p-8 shadow-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
-          <form onSubmit={handlePasswordSubmit} className="space-y-6">
-            <div className="grid gap-6 sm:grid-cols-1">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Current Password</label>
-                <input
-                  type="password"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="••••••••"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
-                />
-              </div>
+              <hr className="border-slate-200 dark:border-slate-800" />
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">New Password</label>
-                <input
-                  type="password"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Security Preferences</h3>
+                
+                <div className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/30">
+                  <input
+                    id="twoFactor"
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-ink-600 focus:ring-ink-500 dark:border-slate-800 dark:bg-slate-950 dark:checked:bg-ink-500 cursor-pointer"
+                    checked={twoFactorEnabled}
+                    onChange={(e) => setTwoFactorEnabled(e.target.checked)}
+                  />
+                  <div>
+                    <label htmlFor="twoFactor" className="text-sm font-bold block cursor-pointer select-none">
+                      Enable Two-Factor Authentication (2FA)
+                    </label>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      When enabled, a secure 6-digit verification code will be sent to your email address during login. You must submit this code to verify your identity.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Confirm New Password</label>
-                <input
-                  type="password"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
+              <div className="flex justify-end">
+                <button
+                  disabled={updateProfileMutation.isPending}
+                  className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
+                >
+                  {updateProfileMutation.isPending ? 'Saving...' : 'Save Settings'}
+                </button>
               </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                disabled={changePasswordMutation.isPending}
-                className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
-              >
-                {changePasswordMutation.isPending ? 'Updating...' : 'Change Password'}
-              </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-8 md:grid-cols-3">
+          <div className="md:col-span-1">
+            <h3 className="text-lg font-bold">Change Password</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Secure your account by updating your login password regularly.
+            </p>
+          </div>
+
+          <div className="md:col-span-2 rounded-[2rem] border border-slate-200 bg-white/60 p-8 shadow-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
+            <form onSubmit={handlePasswordSubmit} className="space-y-6">
+              <div className="grid gap-6 sm:grid-cols-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Current Password</label>
+                  <input
+                    type="password"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="••••••••"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">New Password</label>
+                  <input
+                    type="password"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  disabled={changePasswordMutation.isPending}
+                  className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
+                >
+                  {changePasswordMutation.isPending ? 'Updating...' : 'Change Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

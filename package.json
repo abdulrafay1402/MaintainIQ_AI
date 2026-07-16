@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "dev": "npx -y concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
-    "seed": "npm --prefix backend run seed",
     "test": "npm --prefix backend test"
   }
 }

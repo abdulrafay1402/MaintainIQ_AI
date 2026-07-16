@@ -14,6 +14,7 @@ export default function AdminComplaintsPage() {
   const [technicianId, setTechnicianId] = useState('');
   const [status, setStatus] = useState('Inspection Started');
   const [note, setNote] = useState('');
+  const [activeTab, setActiveTab] = useState('list'); // 'list' or 'details'
 
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -78,6 +79,7 @@ export default function AdminComplaintsPage() {
     onSuccess: () => {
       toast.success('Complaint assigned');
       queryClient.invalidateQueries({ queryKey: ['issues'] });
+      setActiveTab('list');
     },
     onError: (error) => toast.error(error?.response?.data?.message || 'Assignment failed'),
   });
@@ -87,6 +89,7 @@ export default function AdminComplaintsPage() {
     onSuccess: () => {
       toast.success('Complaint updated');
       queryClient.invalidateQueries({ queryKey: ['issues'] });
+      setActiveTab('list');
     },
     onError: (error) => toast.error(error?.response?.data?.message || 'Status update failed'),
   });
@@ -114,82 +117,112 @@ export default function AdminComplaintsPage() {
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">Assign & Verify Complaints</h1>
       </section>
 
-      {/* Split Pane: Queue List vs details */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        
-        {/* Left Side: Queue & Filters */}
-        <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 flex flex-col justify-between">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">Complaint Queue</h2>
-            
-            {/* Filters panel */}
-            <div className="grid gap-3 sm:grid-cols-2 mb-5">
-              <input 
-                value={searchFilter} 
-                onChange={(e) => setSearchFilter(e.target.value)} 
-                placeholder="Search complaint text, number..." 
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60 sm:col-span-2" 
-              />
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                <option value="">All Statuses</option>
-                {workflowStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-              <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                <option value="">All Priorities</option>
-                {['Low', 'Medium', 'High', 'Critical'].map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                <option value="">All Categories</option>
-                {['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'].map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-              <select value={technicianFilter} onChange={(e) => setTechnicianFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                <option value="">All Technicians</option>
-                <option value="unassigned">Unassigned</option>
-                {technicians.map((tech) => <option key={tech._id} value={tech._id}>{tech.name}</option>)}
-              </select>
-            </div>
+      {/* Segmented controls for responsive tabs */}
+      <div className="flex rounded-2xl bg-slate-100/80 p-1 border border-slate-200/50 dark:bg-slate-950/40 dark:border-slate-800/80 max-w-md">
+        <button
+          type="button"
+          onClick={() => setActiveTab('list')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'list'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Complaint Queue
+        </button>
+        <button
+          type="button"
+          disabled={!selected}
+          onClick={() => setActiveTab('details')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            !selected ? 'opacity-40 cursor-not-allowed' : ''
+          } ${
+            activeTab === 'details'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Diagnostics & Actions
+        </button>
+      </div>
 
-            {/* List */}
-            <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
-              {issues.map((issue) => (
-                <button 
-                  key={issue._id} 
-                  onClick={() => { 
-                    setSelectedIssue(issue); 
-                    setTechnicianId(issue.assignedTechnician?._id || ''); 
-                    setStatus(issue.status); 
-                    setNote(issue.maintenanceNotes || ''); 
-                  }} 
-                  className={`w-full rounded-2xl border p-4 text-left transition-all ${
-                    selected?._id === issue._id 
-                      ? 'border-ink-900 bg-slate-50/80 shadow-soft dark:border-white dark:bg-slate-950/40' 
-                      : 'border-slate-150 bg-white/40 hover:bg-slate-50/20 dark:border-slate-800 dark:bg-slate-900/10 dark:hover:bg-slate-950/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-800 dark:text-slate-200 text-sm truncate">{issue.title}</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-1">
-                        {issue.issueNumber} · <span className="font-mono text-ink-600 dark:text-ink-350">{issue.asset?.name || issue.assetCode}</span>
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <StatusBadge value={issue.status} />
-                      <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${getPriorityStyle(issue.priority)}`}>
-                        {issue.priority}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {issues.length === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-400 italic">No complaints match the current filters.</p>
-              ) : null}
-            </div>
-          </div>
-        </section>
+      {/* Responsive layout container */}
+      <div className="w-full">
+        {activeTab === 'list' ? (
+          /* Left Side: Queue & Filters */
+          <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 flex flex-col justify-between max-w-3xl animate-fade-in">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">Complaint Queue</h2>
+              
+              {/* Filters panel */}
+              <div className="grid gap-3 sm:grid-cols-2 mb-5">
+                <input 
+                  value={searchFilter} 
+                  onChange={(e) => setSearchFilter(e.target.value)} 
+                  placeholder="Search complaint text, number..." 
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60 sm:col-span-2" 
+                />
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+                  <option value="">All Statuses</option>
+                  {workflowStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+                  <option value="">All Priorities</option>
+                  {['Low', 'Medium', 'High', 'Critical'].map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+                  <option value="">All Categories</option>
+                  {['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'].map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select value={technicianFilter} onChange={(e) => setTechnicianFilter(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+                  <option value="">All Technicians</option>
+                  <option value="unassigned">Unassigned</option>
+                  {technicians.map((tech) => <option key={tech._id} value={tech._id}>{tech.name}</option>)}
+                </select>
+              </div>
 
-        {/* Right Side: Diagnostics & Admin Actions */}
+              {/* List */}
+              <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
+                {issues.map((issue) => (
+                  <button 
+                    key={issue._id} 
+                    onClick={() => { 
+                      setSelectedIssue(issue); 
+                      setTechnicianId(issue.assignedTechnician?._id || ''); 
+                      setStatus(issue.status); 
+                      setNote(issue.maintenanceNotes || ''); 
+                      setActiveTab('details');
+                    }} 
+                    className={`w-full rounded-2xl border p-4 text-left transition-all ${
+                      selected?._id === issue._id 
+                        ? 'border-ink-900 bg-slate-50/80 shadow-soft dark:border-white dark:bg-slate-950/40' 
+                        : 'border-slate-150 bg-white/40 hover:bg-slate-50/20 dark:border-slate-800 dark:bg-slate-900/10 dark:hover:bg-slate-950/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-855 dark:text-slate-200 text-sm truncate">{issue.title}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-1">
+                          {issue.issueNumber} · <span className="font-mono text-ink-600 dark:text-ink-350">{issue.asset?.name || issue.assetCode}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <StatusBadge value={issue.status} />
+                        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${getPriorityStyle(issue.priority)}`}>
+                          {issue.priority}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {issues.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-slate-400 italic">No complaints match the current filters.</p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        ) : (
+          /* Right Side: Diagnostics & Admin Actions */
         <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 flex flex-col justify-between">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">Complaint Diagnostics</h2>
@@ -360,6 +393,7 @@ export default function AdminComplaintsPage() {
             )}
           </div>
         </section>
+      )}
       </div>
     </div>
   );

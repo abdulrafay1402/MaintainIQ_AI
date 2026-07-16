@@ -9,6 +9,7 @@ const { buildTriage, generateMaintenanceSummary } = require('../services/triageS
 const { findAssetByIdentifier } = require('../utils/assetLookup');
 const { toReporterIssueView } = require('../utils/publicDtos');
 const { notifyAdmins, notifyUser } = require('../services/notificationService');
+const { sendResolutionEmail } = require('../services/emailService');
 
 const buildIssueNumber = () => `ISU-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
@@ -314,17 +315,33 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
 
   await issue.save();
 
-  if (status === 'Resolved' && issue.reporterId) {
-    await safeNotify(() => notifyUser({
-      userId: issue.reporterId,
-      type: 'issue_resolved',
-      title: `Issue resolved: ${issue.issueNumber}`,
-      message: `Your reported issue "${issue.title}" has been resolved.`,
-      relatedIssue: issue._id,
-    }));
+  const asset = await Asset.findById(issue.asset);
+
+  if (status === 'Resolved') {
+    // In-app notification for logged-in reporters
+    if (issue.reporterId) {
+      await safeNotify(() => notifyUser({
+        userId: issue.reporterId,
+        type: 'issue_resolved',
+        title: `Issue resolved: ${issue.issueNumber}`,
+        message: `Your reported issue "${issue.title}" has been resolved.`,
+        relatedIssue: issue._id,
+      }));
+    }
+
+    // Email notification for any reporter who supplied an email (including anonymous QR scans)
+    const recipientEmail = issue.reporterEmail;
+    if (recipientEmail) {
+      await safeNotify(() => sendResolutionEmail({
+        reporterEmail: recipientEmail,
+        reporterName: issue.reporterName || 'Valued Reporter',
+        issue,
+        asset,
+        resolutionNote: note || issue.maintenanceNotes || null,
+      }));
+    }
   }
 
-  const asset = await Asset.findById(issue.asset);
   if (asset) {
     asset.status = nextAssetStatusForIssueStatus(status);
     if (status === 'Inspection Started') {
@@ -447,6 +464,7 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     details: notes,
   });
 
+  // In-app notification for logged-in reporters
   if (issue.reporterId) {
     await safeNotify(() => notifyUser({
       userId: issue.reporterId,
@@ -454,6 +472,18 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
       title: `Issue resolved: ${issue.issueNumber}`,
       message: `Your reported issue "${issue.title}" has been resolved. ${notes}`,
       relatedIssue: issue._id,
+    }));
+  }
+
+  // Email notification — sent to any reporter email (covers anonymous QR scan reporters)
+  const recipientEmail = issue.reporterEmail;
+  if (recipientEmail) {
+    await safeNotify(() => sendResolutionEmail({
+      reporterEmail: recipientEmail,
+      reporterName: issue.reporterName || 'Valued Reporter',
+      issue,
+      asset,
+      resolutionNote: notes || null,
     }));
   }
 

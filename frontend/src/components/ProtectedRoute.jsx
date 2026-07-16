@@ -6,9 +6,10 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (auth.loading) {
     return (
-      <div className="grid min-h-screen place-items-center bg-hero-grid">
-        <div className="rounded-2xl bg-white px-6 py-4 shadow-soft dark:bg-slate-900">
-          Loading session...
+      <div className="grid min-h-screen place-items-center bg-hero-grid text-slate-900 dark:text-slate-100">
+        <div className="flex items-center gap-3 rounded-2xl bg-white/70 px-6 py-4 shadow-premium backdrop-blur-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-900/70">
+          <span className="h-4 w-4 border-2 border-ink-500/30 border-t-ink-500 rounded-full animate-spin-smooth" />
+          <span className="text-sm font-semibold text-[#475569] dark:text-[#cbd5e1]">Loading session...</span>
         </div>
       </div>
     );

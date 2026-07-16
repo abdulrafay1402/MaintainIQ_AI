@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -101,6 +101,8 @@ export default function DashboardLayout() {
   const auth = useAuth();
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const menu = menuByRole[auth.user?.role] || [];
   const [showNotifications, setShowNotifications] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -260,11 +262,24 @@ export default function DashboardLayout() {
       
       {/* Mobile Top Header (Sticky) */}
       <header className="lg:hidden sticky top-0 z-40 flex items-center justify-between p-4 bg-white/70 backdrop-blur-md border-b border-slate-200/50 dark:bg-slate-950/70 dark:border-slate-800/50 shadow-sm">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-ink-500">MaintainIQ</span>
-          <span className="text-sm font-extrabold text-slate-800 dark:text-white">
-            {auth.user?.role === 'student' ? 'Student Portal' : auth.user?.role === 'technician' ? 'Technical Portal' : 'Admin Workspace'}
-          </span>
+        <div className="flex items-center gap-2.5">
+          {!['/student/dashboard', '/admin/dashboard', '/technician/dashboard'].includes(location.pathname) && (
+            <button 
+              onClick={() => navigate(-1)} 
+              className="mr-0.5 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200/65 bg-slate-50/50 hover:bg-slate-100 dark:border-slate-800/80 dark:bg-slate-900 cursor-pointer"
+              aria-label="Go Back"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-ink-500">MaintainIQ</span>
+            <span className="text-sm font-extrabold text-slate-800 dark:text-white">
+              {auth.user?.role === 'student' ? 'Student Portal' : auth.user?.role === 'technician' ? 'Technical Portal' : 'Admin Workspace'}
+            </span>
+          </div>
         </div>
         
         <div className="flex items-center gap-2">
@@ -276,13 +291,12 @@ export default function DashboardLayout() {
             {theme.isDark ? <Icons.Sun /> : <Icons.Moon />}
           </button>
 
-          {/* Three dots mobile navbar toggle */}
+          {/* User Profile Avatar (Mobile) */}
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
-            className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200/80 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 hover:bg-slate-100 text-xs cursor-pointer focus:outline-none"
-            aria-label="Toggle Navigation"
+            className="h-9 w-9 rounded-full bg-ink-100 text-ink-700 dark:bg-ink-950 dark:text-ink-300 font-bold flex items-center justify-center text-xs cursor-pointer border border-slate-200/80 dark:border-slate-800"
           >
-            {isMobileMenuOpen ? <Icons.Close /> : <Icons.Ellipsis />}
+            {getInitials(auth.user?.name)}
           </button>
         </div>
       </header>
@@ -295,20 +309,56 @@ export default function DashboardLayout() {
         />
       )}
 
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] lg:min-h-screen max-w-[1600px] flex-col lg:flex-row p-4 gap-6">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] lg:min-h-screen max-w-[1600px] flex-col lg:flex-row p-4 pb-24 lg:pb-4 gap-6">
         
         {/* Desktop Sidebar (Persistent left side) */}
         <aside className="hidden lg:flex flex-col justify-between glass-panel rounded-[2rem] p-6 w-76 shrink-0 z-10 sticky top-4 h-[calc(100vh-2rem)]">
           {renderAsideContent()}
         </aside>
 
-        {/* Mobile Navigation Drawer (Sliding Overlay) */}
+        {/* Mobile Profile Drawer (Sliding Overlay from Right) */}
         <aside 
-          className={`lg:hidden fixed inset-y-0 left-0 z-50 flex flex-col justify-between w-72 bg-white/95 dark:bg-slate-950/95 p-6 shadow-2xl transition-transform duration-300 transform border-r border-slate-200/60 dark:border-slate-800 ${
-            isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          className={`lg:hidden fixed inset-y-0 right-0 z-50 flex flex-col justify-between w-72 bg-white/95 dark:bg-slate-950/95 p-6 shadow-2xl transition-transform duration-300 transform border-l border-slate-200/60 dark:border-slate-800 ${
+            isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
-          {renderAsideContent()}
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold font-display">Account Profile</h2>
+              <button onClick={closeMobileMenu} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
+                <Icons.Close />
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-4 mt-2">
+              <div className="h-14 w-14 rounded-full bg-ink-100 text-ink-700 dark:bg-ink-950 dark:text-ink-300 font-bold flex items-center justify-center text-lg">
+                {getInitials(auth.user?.name)}
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-slate-900 dark:text-white text-base truncate">{auth.user?.name}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">{auth.user?.email}</p>
+                <span className="inline-block mt-2 rounded-full bg-ink-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-650 dark:bg-ink-950/60 dark:text-ink-300">
+                  {auth.user?.role}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3">
+            <NavLink
+              to="/settings"
+              onClick={closeMobileMenu}
+              className="w-full text-center rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-700 dark:border-slate-800 dark:text-slate-350 dark:hover:bg-slate-900"
+            >
+              Account Settings
+            </NavLink>
+            <button 
+              onClick={handleLogout} 
+              className="w-full text-center rounded-xl bg-ink-900 hover:bg-ink-850 px-4 py-3 text-xs font-bold text-white dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
+            >
+              Log out
+            </button>
+          </div>
         </aside>
 
         {/* Main Content Area */}
@@ -345,8 +395,27 @@ export default function DashboardLayout() {
             <Outlet />
           </div>
         </main>
-
       </div>
+
+      {/* Mobile Sticky Bottom Navigation Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-slate-950/90 border-t border-slate-200/50 dark:border-slate-800/50 px-2 py-2 flex items-center justify-around shadow-lg backdrop-blur-md">
+        {menu.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center gap-1 flex-1 py-1 rounded-xl transition text-center ${
+                isActive
+                  ? 'text-ink-600 dark:text-ink-300 font-extrabold scale-105'
+                  : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-450 font-semibold'
+              }`
+            }
+          >
+            <span className="text-lg shrink-0"><item.icon /></span>
+            <span className="text-[9px] uppercase tracking-wider font-bold block">{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +10,7 @@ const EXPERTISE_OPTIONS = ['Electronics / IT', 'Electrical', 'HVAC / Air Conditi
 export default function AdminStaffPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('list'); // 'list' or 'add'
   const { data: technicians = [] } = useQuery({ 
     queryKey: ['technicians'], 
     queryFn: async () => (await api.get('/users/technicians')).data.technicians 
@@ -29,6 +31,7 @@ export default function AdminStaffPage() {
       toast.success(`${data.user.role.charAt(0).toUpperCase() + data.user.role.slice(1)} account created`);
       queryClient.invalidateQueries({ queryKey: ['technicians'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setActiveTab('list');
       reset();
     },
     onError: (error) => toast.error(error?.response?.data?.message || 'Could not create the account'),
@@ -51,13 +54,38 @@ export default function AdminStaffPage() {
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-normal font-semibold">Onboard administrative users and assign core technical expertise tags to staff members.</p>
       </section>
 
-      {/* Split: Form & Listings */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        
-        {/* Onboarding Form */}
-        <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 flex flex-col justify-between">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">Onboard Staff Account</h2>
+      {/* Segmented controls for responsive tabs */}
+      <div className="flex rounded-2xl bg-slate-100/80 p-1 border border-slate-200/50 dark:bg-slate-950/40 dark:border-slate-800/80 max-w-md">
+        <button
+          type="button"
+          onClick={() => setActiveTab('list')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'list'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Staff Directory
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('add')}
+          className={`flex-1 text-center py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'add'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350'
+          }`}
+        >
+          Onboard Staff
+        </button>
+      </div>
+
+      {/* Responsive layout container */}
+      <div className="w-full">
+        {activeTab === 'add' ? (
+          <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60 max-w-2xl animate-fade-in">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">Onboard Staff Account</h2>
             <form onSubmit={handleSubmit((values) => createMutation.mutate(values))} className="space-y-4 text-sm">
               <div>
                 <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Account Role</label>
@@ -108,9 +136,9 @@ export default function AdminStaffPage() {
             </form>
           </div>
         </section>
-
-        {/* Listings Directory */}
-        <div className="space-y-6">
+      ) : (
+        /* Listings Directory */
+        <div className="space-y-6 max-w-2xl animate-fade-in">
           
           {/* Technicians List Cards */}
           <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60">
@@ -178,6 +206,7 @@ export default function AdminStaffPage() {
           </section>
 
         </div>
+      )}
       </div>
     </div>
   );
