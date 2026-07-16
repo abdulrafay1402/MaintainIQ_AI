@@ -8,10 +8,16 @@ export default function SettingsPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
+  // Profile details state
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
     if (auth.user) {
@@ -34,6 +40,19 @@ export default function SettingsPage() {
     },
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: async (payload) => api.patch('/users/change-password', payload),
+    onSuccess: () => {
+      toast.success('Password updated successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to update password');
+    },
+  });
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -48,8 +67,28 @@ export default function SettingsPage() {
     });
   };
 
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('All password fields are required');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    changePasswordMutation.mutate({
+      currentPassword,
+      newPassword,
+    });
+  };
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 text-slate-900 dark:text-slate-100">
+    <div className="mx-auto max-w-4xl px-4 py-8 text-slate-900 dark:text-slate-100 animate-fade-in">
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold tracking-tight font-display">Account Settings</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -143,6 +182,66 @@ export default function SettingsPage() {
                 className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
               >
                 {updateProfileMutation.isPending ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div className="grid gap-8 md:grid-cols-3 mt-12">
+        <div className="md:col-span-1">
+          <h3 className="text-lg font-bold">Change Password</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Secure your account by updating your login password regularly.
+          </p>
+        </div>
+
+        <div className="md:col-span-2 rounded-[2rem] border border-slate-200 bg-white/60 p-8 shadow-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60">
+          <form onSubmit={handlePasswordSubmit} className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-1">
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Current Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                  placeholder="••••••••"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">New Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                disabled={changePasswordMutation.isPending}
+                className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-6 py-3 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
+              >
+                {changePasswordMutation.isPending ? 'Updating...' : 'Change Password'}
               </button>
             </div>
           </form>

@@ -113,4 +113,32 @@ const updateProfile = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getTechnicians, getUsers, createUser, updateProfile };
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    throw new ApiError(400, 'Current password and new password are required');
+  }
+
+  if (newPassword.length < 6) {
+    throw new ApiError(400, 'New password must be at least 6 characters');
+  }
+
+  const user = await User.findById(req.user._id).select('+password');
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const passwordMatches = await bcrypt.compare(currentPassword, user.password);
+  if (!passwordMatches) {
+    throw new ApiError(401, 'Incorrect current password');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  await user.save();
+
+  res.json({ message: 'Password updated successfully' });
+});
+
+module.exports = { getTechnicians, getUsers, createUser, updateProfile, changePassword };
