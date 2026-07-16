@@ -100,4 +100,10 @@ assetSchema.pre('save', function (next) {
   next();
 });
 
+const { invalidateAssetCache } = require('../utils/cache');
+
+assetSchema.post('save', function (doc) {
+  invalidateAssetCache();
+});
+
 module.exports = mongoose.model('Asset', assetSchema);

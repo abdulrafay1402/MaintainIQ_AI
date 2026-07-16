@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { createHistoryEntry } = require('../services/historyService');
 const { findAssetByIdentifier } = require('../utils/assetLookup');
 const { toPublicAssetDto, toPublicIssueActivityDto } = require('../utils/publicDtos');
+const { appCache, invalidateAssetCache } = require('../utils/cache');
 
 const getPublicAssetUrl = (publicId) => {
   return `${process.env.CLIENT_URL || 'http://localhost:5173'}/public/assets/${publicId}`;
@@ -44,11 +45,20 @@ const createAsset = asyncHandler(async (req, res) => {
   const publicUrl = getPublicAssetUrl(asset.publicId);
   const qrCodeDataUrl = await QRCode.toDataURL(publicUrl);
 
+  invalidateAssetCache();
+
   res.status(201).json({ asset, publicUrl, qrCodeDataUrl });
 });
 
 const getAssets = asyncHandler(async (req, res) => {
   const { search, status, category, location, assignedTechnician } = req.query;
+  const cacheKey = `assets:${JSON.stringify(req.query)}`;
+  const cachedAssets = appCache.get(cacheKey);
+
+  if (cachedAssets) {
+    return res.json({ assets: cachedAssets, cached: true });
+  }
+
   const filter = {};
 
   if (search) {
@@ -68,6 +78,8 @@ const getAssets = asyncHandler(async (req, res) => {
   }
 
   const assets = await Asset.find(filter).populate('assignedTechnician', 'name email role').sort({ createdAt: -1 });
+  appCache.set(cacheKey, assets);
+
   res.json({ assets });
 });
 
@@ -110,6 +122,8 @@ const updateAsset = asyncHandler(async (req, res) => {
     action: 'Asset updated',
     details: `${asset.name} details were updated`,
   });
+
+  invalidateAssetCache();
 
   res.json({ asset });
 });

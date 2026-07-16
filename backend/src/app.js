@@ -1,10 +1,17 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const compression = require('compression');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
+
+app.use(helmet());
+app.use(compression());
+app.use(morgan('dev'));
 
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',

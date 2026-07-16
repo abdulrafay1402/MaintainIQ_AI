@@ -3,6 +3,7 @@ const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const generateToken = require('../utils/generateToken');
+const { sendEmail } = require('../services/emailService');
 
 const cookieOptions = {
   httpOnly: true,
@@ -52,6 +53,12 @@ const register = asyncHandler(async (req, res) => {
 
   const token = generateToken({ id: user._id, role: user.role, name: user.name, email: user.email });
 
+  sendEmail({
+    to: user.email,
+    subject: 'Welcome to MaintainIQ! 🎉',
+    text: `Hello ${user.name},\n\nYour account has been successfully created. You can now use MaintainIQ to scan assets, log faults, and track technician operations.\n\nBest regards,\nMaintainIQ Team`,
+  }).catch((err) => console.error('Failed to send welcome email:', err.message));
+
   res.cookie('token', token, cookieOptions);
   res.status(201).json({
     message: 'User registered',
@@ -83,6 +90,13 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken({ id: user._id, role: user.role, name: user.name, email: user.email });
+
+  sendEmail({
+    to: user.email,
+    subject: 'Security Alert: New Login Detected 🔐',
+    text: `Hello ${user.name},\n\nA new login was detected on your MaintainIQ account at ${new Date().toLocaleString()}.\n\nIf this was not you, please secure your credentials immediately.\n\nBest regards,\nMaintainIQ Team`,
+  }).catch((err) => console.error('Failed to send login alert email:', err.message));
+
   res.cookie('token', token, cookieOptions);
 
   res.json({

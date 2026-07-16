@@ -4,7 +4,11 @@ import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
 
 export default function TechnicianDashboardPage() {
-  const { data: tasks = [] } = useQuery({ queryKey: ['assigned-issues'], queryFn: async () => (await api.get('/issues/assigned')).data.issues });
+  const { data: tasks = [] } = useQuery({ 
+    queryKey: ['assigned-issues'], 
+    queryFn: async () => (await api.get('/issues/assigned')).data.issues 
+  });
+  
   const completedTasks = tasks.filter((issue) => ['Resolved', 'Verified', 'Closed'].includes(issue.status));
   const completed = completedTasks.length;
   const pending = tasks.length - completed;
@@ -16,30 +20,63 @@ export default function TechnicianDashboardPage() {
     ? `${(repairDurations.reduce((sum, hours) => sum + hours, 0) / repairDurations.length).toFixed(1)} h`
     : 'N/A';
 
-  return <div className="space-y-6">
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-ink-500">Technician dashboard</p>
-      <h1 className="mt-2 text-3xl font-semibold">Assigned repairs and maintenance workflow</h1>
-    </section>
+  return (
+    <div className="space-y-6">
+      {/* Banner */}
+      <section className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white/70 p-8 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60">
+        <div className="absolute top-0 right-0 h-40 w-40 rounded-full bg-ink-500/5 blur-[50px] pointer-events-none" />
+        
+        <p className="text-xs font-bold uppercase tracking-[0.25em] text-ink-500 font-display">Technical Command</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">
+          My Repairs & Work orders
+        </h1>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed font-semibold">
+          Review issues assigned to your queue, track diagnostics suggestions, and log your maintenance actions from inspections up to repair completion.
+        </p>
+      </section>
 
-    <div className="grid gap-4 md:grid-cols-4">
-      <StatCard label="Assigned tasks" value={tasks.length} />
-      <StatCard label="Pending tasks" value={pending} />
-      <StatCard label="Completed tasks" value={completed} />
-      <StatCard label="Average repair time" value={averageRepairTime} hint="Average duration of your completed repairs" />
-    </div>
-
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-xl font-semibold">Recent repairs</h2>
-      <div className="mt-4 space-y-3">
-        {tasks.slice(0, 5).map((issue) => <div key={issue._id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-          <div>
-            <p className="font-medium">{issue.title}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{issue.asset?.name || issue.assetCode}</p>
-          </div>
-          <StatusBadge value={issue.status} />
-        </div>)}
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Assigned tasks" value={tasks.length} hint="Total tasks in your queue" />
+        <StatCard label="Pending repairs" value={pending} hint="Awaiting field inspection or fix" />
+        <StatCard label="Completed work" value={completed} hint="Resolved and verified orders" />
+        <StatCard label="Avg Repair Time" value={averageRepairTime} hint="Average speed of resolved tasks" />
       </div>
-    </section>
-  </div>;
+
+      {/* Recent Repairs Cards */}
+      <section className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-6 shadow-soft backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/60">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white font-display">Active assigned queue</h2>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Browse recent active work orders</p>
+          </div>
+        </div>
+        
+        <div className="mt-5 space-y-3">
+          {tasks.slice(0, 5).map((issue) => (
+            <div 
+              key={issue._id} 
+              className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white/50 p-4 transition-all hover:bg-slate-50/50 hover:translate-x-1 dark:border-slate-800 dark:bg-slate-950/20 dark:hover:bg-slate-900/30"
+            >
+              <div className="flex items-center gap-3">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 dark:bg-slate-950/60 text-sm">
+                  🛠️
+                </span>
+                <div>
+                  <p className="font-bold text-sm text-slate-850 dark:text-slate-200">{issue.title}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-semibold">
+                    {issue.issueNumber} · <span className="font-mono text-ink-600 dark:text-ink-350">{issue.asset?.name || issue.assetCode}</span>
+                  </p>
+                </div>
+              </div>
+              <StatusBadge value={issue.status} />
+            </div>
+          ))}
+          {tasks.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400 italic">No tasks currently assigned to you.</p>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
 }

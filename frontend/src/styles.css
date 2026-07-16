@@ -1,9 +1,11 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;850&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Outfit', sans-serif;
   
   --color-ink-50: #faf8ff;
   --color-ink-100: #f3effe;
@@ -27,9 +29,12 @@
   --color-accent-800: #155e75;
   --color-accent-900: #164e63;
 
-  --shadow-soft: 0 18px 60px rgba(98, 0, 234, 0.06);
+  --shadow-soft: 0 16px 40px rgba(98, 0, 234, 0.04);
+  --shadow-premium: 0 24px 68px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(98, 0, 234, 0.02);
+  --shadow-dark-premium: 0 24px 68px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(124, 77, 255, 0.05);
 
-  --background-image-hero-grid: radial-gradient(circle at top, rgba(124, 77, 255, 0.14), transparent 35%), linear-gradient(180deg, #faf9fe 0%, #f6f3ff 100%);
+  --background-image-hero-grid: radial-gradient(circle at top, rgba(124, 77, 255, 0.08), transparent 45%), linear-gradient(180deg, #fbfaff 0%, #f7f6fc 100%);
+  --background-image-hero-grid-dark: radial-gradient(circle at top, rgba(124, 77, 255, 0.12), transparent 45%), linear-gradient(180deg, #090615 0%, #030206 100%);
 }
 
 /* Custom premium styling */
@@ -40,17 +45,48 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+}
+
+/* Glowing backdrops */
+.glow-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(130px);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+  animation: float-slow 15s ease-in-out infinite alternate;
+}
+
+@keyframes float-slow {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(5%, 10%) scale(1.1);
+  }
+  100% {
+    transform: translate(-5%, -5%) scale(0.95);
+  }
+}
+
 /* Glassmorphism panel styling */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--shadow-premium);
 }
 
 .dark .glass-panel {
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(13, 10, 28, 0.65);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-dark-premium);
 }
 
 /* Custom scrollbars */
@@ -62,37 +98,60 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(124, 77, 255, 0.15);
   border-radius: 9999px;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(124, 77, 255, 0.25);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(124, 77, 255, 0.35);
 }
 
-/* Micro-animations and hover effects */
-button, a, input, select, textarea {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-button, a, select, option, label, [type="button"], [type="submit"] {
-  cursor: pointer;
+/* Premium Form Elements */
+input, select, textarea {
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 input:focus, select:focus, textarea:focus {
-  box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.25);
+  border-color: var(--color-ink-400) !important;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(124, 77, 255, 0.12) !important;
+}
+
+.dark input:focus, .dark select:focus, .dark textarea:focus {
+  border-color: var(--color-ink-500) !important;
+  background-color: rgba(9, 6, 21, 0.4);
+  box-shadow: 0 0 0 4px rgba(124, 77, 255, 0.18) !important;
+}
+
+/* Smooth lists & buttons */
+button, a {
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.interactive-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(98, 0, 234, 0.08);
+}
+.dark .interactive-hover:hover {
+  box-shadow: 0 12px 30px rgba(124, 77, 255, 0.15);
+}
+
+/* Hero bg utility */
+.bg-hero-grid {
+  background-image: var(--background-image-hero-grid);
+}
+
+.dark .bg-hero-grid {
+  background-image: var(--background-image-hero-grid-dark);
 }
 
 @keyframes pulse-subtle {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(0.995); }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.995); opacity: 0.96; }
 }
 
 .animate-pulse-subtle {
-  animation: pulse-subtle 3s ease-in-out infinite;
+  animation: pulse-subtle 4s ease-in-out infinite;
 }
