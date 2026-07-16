@@ -55,6 +55,16 @@ const userSchema = new mongoose.Schema(
     verificationCodeExpires: {
       type: Date,
     },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    resetPasswordCode: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

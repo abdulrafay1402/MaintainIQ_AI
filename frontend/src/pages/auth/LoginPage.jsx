@@ -18,6 +18,11 @@ export default function LoginPage() {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [codeValue, setCodeValue] = useState('');
 
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(null); // 'request', 'reset', or null
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
   const loginMutation = useMutation({
     mutationFn: async (values) => api.post('/auth/login', values),
     onSuccess: (response) => {
@@ -40,6 +45,45 @@ export default function LoginPage() {
       toast.error(error?.response?.data?.message || 'Login failed');
     },
   });
+
+  const requestResetMutation = useMutation({
+    mutationFn: async (email) => api.post('/auth/forgot-password', { email }),
+    onSuccess: () => {
+      toast.success('Password reset code sent to email');
+      setForgotPasswordMode('reset');
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to send reset code');
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ email, code, newPassword }) => api.post('/auth/reset-password', { email, code, newPassword }),
+    onSuccess: () => {
+      toast.success('Password reset successful. Please login with your new password.');
+      setForgotPasswordMode(null);
+      setResetCode('');
+      setNewPassword('');
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Failed to reset password');
+    },
+  });
+
+  const handleRequestResetSubmit = (e) => {
+    e.preventDefault();
+    if (!forgotEmail) return;
+    requestResetMutation.mutate(forgotEmail);
+  };
+
+  const handleResetPasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!forgotEmail || resetCode.length !== 6 || newPassword.length < 6) {
+      toast.error('Please fill in all fields correctly (Password min 6 chars)');
+      return;
+    }
+    resetPasswordMutation.mutate({ email: forgotEmail, code: resetCode, newPassword });
+  };
 
   const verifyMutation = useMutation({
     mutationFn: async ({ email, code }) => api.post('/auth/verify-otp', { email, code }),
@@ -135,6 +179,134 @@ export default function LoginPage() {
     );
   }
 
+  if (forgotPasswordMode === 'request') {
+    return (
+      <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
+        {/* Visual Ambient Orbs */}
+        <div className="glow-orb bg-ink-400 h-96 w-96 -top-32 -left-32 dark:bg-ink-600/30" />
+        <div className="glow-orb bg-accent-400 h-96 w-96 -bottom-32 -right-32 dark:bg-accent-600/20" />
+
+        <div className="relative mx-auto max-w-md w-full rounded-[2.5rem] border border-slate-200 bg-white/60 p-8 shadow-premium backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60 z-10">
+          <p className="text-xs font-bold uppercase tracking-[0.28em] text-ink-500">Recovery Portal</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Forgot Password</h2>
+          <p className="mt-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+            Enter your email address to receive a 6-digit password reset code.
+          </p>
+
+          <form onSubmit={handleRequestResetSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Email Address</label>
+              <input 
+                type="email"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3.5 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60" 
+                placeholder="name@example.com" 
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <button 
+              disabled={requestResetMutation.isPending}
+              className="w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2"
+            >
+              {requestResetMutation.isPending ? 'Sending...' : 'Send Reset Code'}
+            </button>
+          </form>
+
+          <div className="mt-6 flex justify-center text-xs font-semibold">
+            <button 
+              onClick={() => setForgotPasswordMode(null)}
+              className="text-slate-400 hover:text-slate-500 dark:text-slate-500 cursor-pointer"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (forgotPasswordMode === 'reset') {
+    return (
+      <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
+        {/* Visual Ambient Orbs */}
+        <div className="glow-orb bg-ink-400 h-96 w-96 -top-32 -left-32 dark:bg-ink-600/30" />
+        <div className="glow-orb bg-accent-400 h-96 w-96 -bottom-32 -right-32 dark:bg-accent-600/20" />
+
+        <div className="relative mx-auto max-w-md w-full rounded-[2.5rem] border border-slate-200 bg-white/60 p-8 shadow-premium backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60 z-10">
+          <p className="text-xs font-bold uppercase tracking-[0.28em] text-ink-500">Recovery Portal</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Reset Password</h2>
+          <p className="mt-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+            Enter the 6-digit code sent to your email and choose a new password.
+          </p>
+
+          <form onSubmit={handleResetPasswordSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Email Address</label>
+              <input 
+                type="email"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3.5 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60" 
+                placeholder="name@example.com" 
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Reset Code</label>
+              <input 
+                type="text"
+                maxLength={6}
+                className="w-full text-center tracking-[0.5em] font-bold rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3.5 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60" 
+                placeholder="000000"
+                value={resetCode}
+                onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ''))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">New Password</label>
+              <input 
+                type="password"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3.5 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60" 
+                placeholder="••••••••" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button 
+              disabled={resetPasswordMutation.isPending}
+              className="w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2"
+            >
+              {resetPasswordMutation.isPending ? 'Resetting...' : 'Reset Password'}
+            </button>
+          </form>
+
+          <div className="mt-6 flex justify-between items-center text-xs font-semibold">
+            <button 
+              onClick={() => requestResetMutation.mutate(forgotEmail)}
+              disabled={requestResetMutation.isPending}
+              className="text-ink-600 hover:text-ink-700 underline dark:text-ink-300 cursor-pointer"
+            >
+              {requestResetMutation.isPending ? 'Sending...' : 'Resend Code'}
+            </button>
+            <button 
+              onClick={() => setForgotPasswordMode(null)}
+              className="text-slate-400 hover:text-slate-500 dark:text-slate-500 cursor-pointer"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
       {/* Visual Ambient Orbs */}
@@ -192,6 +364,16 @@ export default function LoginPage() {
             <div>
               <div className="flex justify-between items-center mb-1.5 ml-1">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Password</label>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setForgotEmail('');
+                    setForgotPasswordMode('request');
+                  }}
+                  className="text-xs font-semibold text-ink-600 hover:text-ink-700 underline dark:text-ink-300 cursor-pointer"
+                >
+                  Forgot password?
+                </button>
               </div>
               <input 
                 type="password" 

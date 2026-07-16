@@ -100,6 +100,23 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid email or password');
   }
 
+  if (user.isVerified && !user.twoFactorEnabled) {
+    const token = generateToken({ id: user._id, role: user.role, name: user.name, email: user.email });
+
+    res.cookie('token', token, cookieOptions);
+
+    return res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  }
+
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -191,17 +208,13 @@ const verifyOtp = asyncHandler(async (req, res) => {
 const resendOtp = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
-  if (!email) {
-    throw new ApiError(400, 'Email is required');
-  }
-
   const user = await User.findOne({ email });
   if (!user) {
     throw new ApiError(404, 'User not found');
   }
 
-  if (user.isVerified) {
-    throw new ApiError(400, 'User is already verified');
+  if (user.isVerified && !user.twoFactorEnabled) {
+    throw new ApiError(400, 'User is already verified and does not have 2FA enabled');
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -235,6 +248,80 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, 'Email is required');
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+  user.resetPasswordCode = code;
+  user.resetPasswordExpires = expires;
+  await user.save();
+
+  sendEmail({
+    to: user.email,
+    subject: 'MaintainIQ Password Reset Code',
+    text: `Hello ${user.name},\n\nYour password reset code is: ${code}\n\nThis code expires in 15 minutes.\n\nBest regards,\nMaintainIQ Team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ECF8FD;">
+        <h2 style="color: #272838; text-align: center;">Reset Your MaintainIQ Password</h2>
+        <p style="color: #272838; font-size: 16px;">Hello ${user.name},</p>
+        <p style="color: #272838; font-size: 16px;">You requested a password reset. Please use the following code to reset your password:</p>
+        <div style="background-color: #272838; color: #F2B418; font-size: 32px; font-weight: bold; text-align: center; padding: 15px; margin: 20px 0; border-radius: 8px; letter-spacing: 5px;">
+          ${code}
+        </div>
+        <p style="color: #815355; font-size: 14px; text-align: center;">This code will expire in 15 minutes.</p>
+        <hr style="border: 0; border-top: 1px solid #AFCBD5; margin: 20px 0;">
+        <p style="color: #5F7F8C; font-size: 12px; text-align: center;">© 2026 MaintainIQ. All rights reserved.</p>
+      </div>
+    `,
+  }).catch((err) => console.error('Failed to send reset email:', err.message));
+
+  res.json({ message: 'Password reset code sent to email' });
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  if (!email || !code || !newPassword) {
+    throw new ApiError(400, 'Email, code, and new password are required');
+  }
+
+  if (newPassword.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (user.resetPasswordCode !== code) {
+    throw new ApiError(400, 'Invalid reset code');
+  }
+
+  if (new Date() > user.resetPasswordExpires) {
+    throw new ApiError(400, 'Reset code has expired');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  user.resetPasswordCode = undefined;
+  user.resetPasswordExpires = undefined;
+  await user.save();
+
+  res.json({ message: 'Password reset successful' });
+});
+
 const logout = asyncHandler(async (req, res) => {
   res.clearCookie('token', cookieOptions);
   res.json({ message: 'Logged out' });
@@ -247,8 +334,11 @@ const me = asyncHandler(async (req, res) => {
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
+      twoFactorEnabled: req.user.twoFactorEnabled,
+      department: req.user.department,
+      phone: req.user.phone,
     },
   });
 });
 
-module.exports = { register, login, logout, me, verifyOtp, resendOtp };
+module.exports = { register, login, logout, me, verifyOtp, resendOtp, forgotPassword, resetPassword };

@@ -34,6 +34,9 @@ const createUser = asyncHandler(async (req, res) => {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // Admin created OTP expires in 24h
+
   const user = await User.create({
     name,
     email,
@@ -41,8 +44,34 @@ const createUser = asyncHandler(async (req, res) => {
     role,
     expertise: Array.isArray(expertise) ? expertise : [],
     isActive: true,
-    isVerified: true,
+    isVerified: false,
+    verificationCode: otp,
+    verificationCodeExpires: otpExpires,
   });
+
+  const { sendEmail } = require('../services/emailService');
+  sendEmail({
+    to: user.email,
+    subject: 'MaintainIQ Account Created',
+    text: `Hello ${user.name},\n\nAn administrator has created your MaintainIQ ${role} account. Here are your credentials:\n\nEmail: ${user.email}\nPassword: ${password}\n\nYour 2-Factor verification code is: ${otp}\n\nPlease enter this code on your first login.\n\nBest regards,\nMaintainIQ Team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ECF8FD;">
+        <h2 style="color: #272838; text-align: center;">MaintainIQ Account Created</h2>
+        <p style="color: #272838; font-size: 16px;">Hello ${user.name},</p>
+        <p style="color: #272838; font-size: 16px;">An administrator has created your MaintainIQ <strong>${role}</strong> account. Here are your credentials:</p>
+        <div style="background-color: #272838; color: #ECF8FD; padding: 15px; border-radius: 8px; font-size: 16px; margin: 20px 0;">
+          <strong>Email:</strong> ${user.email}<br/>
+          <strong>Password:</strong> ${password}
+        </div>
+        <p style="color: #272838; font-size: 16px;">To verify and activate your account, please use the following verification code during login:</p>
+        <div style="background-color: #272838; color: #F2B418; font-size: 32px; font-weight: bold; text-align: center; padding: 15px; margin: 20px 0; border-radius: 8px; letter-spacing: 5px;">
+          ${otp}
+        </div>
+        <hr style="border: 0; border-top: 1px solid #AFCBD5; margin: 20px 0;">
+        <p style="color: #5F7F8C; font-size: 12px; text-align: center;">© 2026 MaintainIQ. All rights reserved.</p>
+      </div>
+    `,
+  }).catch((err) => console.error('Failed to send admin onboard verification email:', err.message));
 
   res.status(201).json({
     user: {
@@ -55,4 +84,33 @@ const createUser = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getTechnicians, getUsers, createUser };
+const updateProfile = asyncHandler(async (req, res) => {
+  const { name, phone, department, twoFactorEnabled } = req.body;
+
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (name) user.name = name;
+  if (phone !== undefined) user.phone = phone.trim();
+  if (department !== undefined) user.department = department.trim();
+  if (twoFactorEnabled !== undefined) user.twoFactorEnabled = !!twoFactorEnabled;
+
+  await user.save();
+
+  res.json({
+    message: 'Profile updated successfully',
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      department: user.department,
+      twoFactorEnabled: user.twoFactorEnabled,
+    },
+  });
+});
+
+module.exports = { getTechnicians, getUsers, createUser, updateProfile };

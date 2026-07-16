@@ -14,6 +14,7 @@ import StudentDashboardPage from './pages/student/StudentDashboardPage';
 import StudentComplaintsPage from './pages/student/StudentComplaintsPage';
 import StudentScanPage from './pages/student/StudentScanPage';
 import NotFoundPage from './pages/NotFoundPage';
+import SettingsPage from './pages/SettingsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './components/DashboardLayout';
 
@@ -54,6 +55,9 @@ export default function App() {
         <Route path="student/dashboard" element={<ProtectedRoute allowedRoles={['student', 'admin', 'technician']}><StudentDashboardPage /></ProtectedRoute>} />
         <Route path="student/complaints" element={<ProtectedRoute allowedRoles={['student', 'admin', 'technician']}><StudentComplaintsPage /></ProtectedRoute>} />
         <Route path="student/scan" element={<ProtectedRoute allowedRoles={['student', 'admin', 'technician']}><StudentScanPage /></ProtectedRoute>} />
+
+        {/* Global Settings */}
+        <Route path="settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       </Route>
 
       {/* Catch-all for non-existing pages */}
