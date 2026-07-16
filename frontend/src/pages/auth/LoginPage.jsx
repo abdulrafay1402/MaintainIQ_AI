@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
@@ -13,9 +14,22 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '' } 
   });
 
+  const [verificationPending, setVerificationPending] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [codeValue, setCodeValue] = useState('');
+
   const loginMutation = useMutation({
     mutationFn: async (values) => api.post('/auth/login', values),
     onSuccess: (response) => {
+      if (response.data.status === 'verification_pending') {
+        setVerificationEmail(response.data.email);
+        setVerificationPending(true);
+        toast.success('Please verify your email address to log in');
+        return;
+      }
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
       queryClient.setQueryData(['auth', 'me'], response.data.user);
       auth.setUser(response.data.user);
       toast.success('Welcome back');
@@ -27,7 +41,99 @@ export default function LoginPage() {
     },
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: async ({ email, code }) => api.post('/auth/verify-otp', { email, code }),
+    onSuccess: (response) => {
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      queryClient.setQueryData(['auth', 'me'], response.data.user);
+      auth.setUser(response.data.user);
+      toast.success('Welcome back');
+      const role = response.data.user.role;
+      navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Verification failed');
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: async (email) => api.post('/auth/resend-otp', { email }),
+    onSuccess: () => {
+      toast.success('A new verification code has been sent');
+    },
+    onError: (error) => {
+      toast.error(error?.response?.data?.message || 'Could not resend code');
+    },
+  });
+
   const onSubmit = (values) => loginMutation.mutateAsync(values);
+
+  const handleVerifySubmit = (e) => {
+    e.preventDefault();
+    if (codeValue.length !== 6) {
+      toast.error('Verification code must be 6 digits');
+      return;
+    }
+    verifyMutation.mutate({ email: verificationEmail, code: codeValue });
+  };
+
+  if (verificationPending) {
+    return (
+      <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
+        {/* Visual Ambient Orbs */}
+        <div className="glow-orb bg-ink-400 h-96 w-96 -top-32 -left-32 dark:bg-ink-600/30" />
+        <div className="glow-orb bg-accent-400 h-96 w-96 -bottom-32 -right-32 dark:bg-accent-600/20" />
+
+        <div className="relative mx-auto max-w-md w-full rounded-[2.5rem] border border-slate-200 bg-white/60 p-8 shadow-premium backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60 z-10">
+          <p className="text-xs font-bold uppercase tracking-[0.28em] text-ink-500">Security Verification</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Verify Email Address</h2>
+          <p className="mt-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+            We sent a 6-digit OTP code to your registered email: <strong>{verificationEmail}</strong>
+          </p>
+
+          <form onSubmit={handleVerifySubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Verification Code</label>
+              <input 
+                type="text"
+                maxLength={6}
+                className="w-full text-center tracking-[0.5em] font-bold rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-lg outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60" 
+                placeholder="000000"
+                value={codeValue}
+                onChange={(e) => setCodeValue(e.target.value.replace(/\D/g, ''))}
+                required
+              />
+            </div>
+
+            <button 
+              disabled={verifyMutation.isPending}
+              className="w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2"
+            >
+              {verifyMutation.isPending ? 'Verifying...' : 'Verify Code'}
+            </button>
+          </form>
+
+          <div className="mt-6 flex justify-between items-center text-xs font-semibold">
+            <button 
+              onClick={() => resendMutation.mutate(verificationEmail)}
+              disabled={resendMutation.isPending}
+              className="text-ink-600 hover:text-ink-700 underline dark:text-ink-300 cursor-pointer"
+            >
+              {resendMutation.isPending ? 'Sending...' : 'Resend Code'}
+            </button>
+            <button 
+              onClick={() => setVerificationPending(false)}
+              className="text-slate-400 hover:text-slate-500 dark:text-slate-500 cursor-pointer"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
@@ -45,7 +151,6 @@ export default function LoginPage() {
           
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xl">🛡️</span>
               <span className="text-xs font-bold uppercase tracking-[0.3em] text-accent-300">MaintainIQ Workspace</span>
             </div>
             

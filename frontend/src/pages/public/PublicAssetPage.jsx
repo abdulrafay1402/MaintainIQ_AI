@@ -123,8 +123,10 @@ export default function PublicAssetPage() {
     return (
       <div className="grid min-h-screen place-items-center bg-hero-grid p-4 text-slate-900 dark:text-slate-100">
         <div className="rounded-[2.5rem] border border-rose-200 bg-white/70 px-8 py-8 text-center shadow-premium backdrop-blur-xl dark:border-rose-950/40 dark:bg-slate-900/60 max-w-md w-full">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-450 text-xl">
-            ⚠️
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-450">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
           </div>
           <h2 className="mt-4 text-xl font-bold tracking-tight font-display">Unregistered Equipment</h2>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-normal font-semibold">
@@ -174,7 +176,7 @@ export default function PublicAssetPage() {
 
         {isRetired ? (
           <section className="rounded-2xl border border-amber-300 bg-amber-50/50 p-5 text-amber-900 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-300 leading-normal text-xs font-semibold">
-            ⚠️ This equipment has been retired from active service. Records remain viewable, but new complaints cannot be filed against it.
+            Warning: This equipment has been retired from active service. Records remain viewable, but new complaints cannot be filed against it.
           </section>
         ) : null}
 

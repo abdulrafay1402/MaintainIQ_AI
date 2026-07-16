@@ -10,8 +10,13 @@ export function AuthProvider({ children }) {
   const meQuery = useQuery({
     queryKey: AUTH_QUERY_KEY,
     queryFn: async () => {
-      const response = await api.get('/auth/me');
-      return response.data.user;
+      try {
+        const response = await api.get('/auth/me');
+        return response.data.user;
+      } catch (error) {
+        localStorage.removeItem('token');
+        throw error;
+      }
     },
     retry: false,
   });
@@ -19,6 +24,7 @@ export function AuthProvider({ children }) {
   const logoutMutation = useMutation({
     mutationFn: async () => api.post('/auth/logout'),
     onSuccess: () => {
+      localStorage.removeItem('token');
       queryClient.setQueryData(AUTH_QUERY_KEY, null);
       queryClient.removeQueries({ queryKey: AUTH_QUERY_KEY });
     },
@@ -30,7 +36,9 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(meQuery.data),
     setUser: (user) => queryClient.setQueryData(AUTH_QUERY_KEY, user),
     refreshUser: () => queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY }),
-    logout: () => logoutMutation.mutateAsync(),
+    logout: async () => {
+      await logoutMutation.mutateAsync();
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

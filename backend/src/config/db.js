@@ -29,14 +29,16 @@ const connectDB = async () => {
     throw new Error("MONGODB_URI is required");
   }
 
-  // Extract hostname from MONGODB_URI
-  const hostname = process.env.MONGODB_URI.split('@').pop().split('/').shift().split(':').shift();
-  try {
-    console.log(`Checking DNS resolution for MongoDB host: ${hostname}...`);
-    await checkDnsResolution(hostname);
-    console.log("DNS resolution: OK");
-  } catch (dnsErr) {
-    throw new Error(`MongoDB connection check failed: DNS lookup error. Details: ${dnsErr.message}`);
+  if (!process.env.VERCEL) {
+    // Extract hostname from MONGODB_URI
+    const hostname = process.env.MONGODB_URI.split('@').pop().split('/').shift().split(':').shift();
+    try {
+      console.log(`Checking DNS resolution for MongoDB host: ${hostname}...`);
+      await checkDnsResolution(hostname);
+      console.log("DNS resolution: OK");
+    } catch (dnsErr) {
+      throw new Error(`MongoDB connection check failed: DNS lookup error. Details: ${dnsErr.message}`);
+    }
   }
 
   if (!cached.promise) {

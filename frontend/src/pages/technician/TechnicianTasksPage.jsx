@@ -161,7 +161,7 @@ export default function TechnicianTasksPage() {
                 {/* Details card */}
                 <div className="rounded-3xl border border-slate-100 bg-slate-50/50 p-5 dark:border-slate-800 dark:bg-slate-950/20 space-y-4">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">📋 Ticket Reference (Read-Only)</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Reference (Read-Only)</span>
                     <h3 className="text-lg font-bold mt-1 text-slate-900 dark:text-white font-display">{selected.title}</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       Issue Number: <span className="font-mono font-semibold">{selected.issueNumber}</span>
@@ -230,13 +230,13 @@ export default function TechnicianTasksPage() {
                 {/* AI suggestion triage match context */}
                 {selected.aiSuggestion && (
                   <div className="border-t border-slate-150 pt-3 dark:border-slate-850">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-violet-650 dark:text-violet-400 block mb-1">✨ AI Triage Diagnostics Context</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-violet-650 dark:text-violet-400 block mb-1">AI Triage Diagnostics Context</span>
                     <p className="text-xs text-slate-500 dark:text-slate-450 mt-1 leading-normal font-semibold">
                       Suggested Cause: <span className="underline">{selected.aiSuggestion.possibleCauses?.join(', ') || 'N/A'}</span>
                     </p>
                     {selected.aiSuggestion.warning && (
                       <p className="text-[10px] text-amber-700 mt-1.5 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-100/50 dark:border-amber-900/10 font-semibold">
-                        ⚠️ {selected.aiSuggestion.warning}
+                        Warning: {selected.aiSuggestion.warning}
                       </p>
                     )}
                   </div>

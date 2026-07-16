@@ -42,6 +42,11 @@ const connectEmail = async () => {
     return;
   }
 
+  if (process.env.VERCEL) {
+    console.log('Nodemailer: Running in serverless context (Vercel). Skipping SMTP verification on startup.');
+    return;
+  }
+
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   try {
     console.log(`Checking DNS resolution for SMTP host: ${host}...`);

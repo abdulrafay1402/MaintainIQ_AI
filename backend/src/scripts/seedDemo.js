@@ -13,13 +13,14 @@ const seed = async () => {
   const technicianPassword = await bcrypt.hash('Tech@123', 10);
 
   const admin = await User.findOneAndUpdate(
-    { email: 'admin@maintainiq.local' },
+    { email: 'k243007@nu.edu.pk' },
     {
       name: 'Admin User',
-      email: 'admin@maintainiq.local',
+      email: 'k243007@nu.edu.pk',
       password: adminPassword,
       role: 'admin',
       isActive: true,
+      isVerified: true,
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
@@ -92,7 +93,7 @@ const seed = async () => {
   });
 
   console.log('Seed complete');
-  console.log('Admin login: admin@maintainiq.local / Admin@123');
+  console.log('Admin login: k243007@nu.edu.pk / Admin@123');
   console.log('Technician login: tech@maintainiq.local / Tech@123');
   process.exit(0);
 };

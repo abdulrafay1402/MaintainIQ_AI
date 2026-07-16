@@ -32,13 +32,23 @@ export default function StudentDashboardPage() {
             to="/student/scan" 
             className="rounded-2xl bg-ink-900 hover:bg-ink-850 px-5 py-3 text-sm font-bold text-white shadow dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
           >
-            🔍 Scan Asset QR Code
+            <span className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Scan Asset QR Code</span>
+            </span>
           </Link>
           <Link 
             to="/student/complaints" 
             className="rounded-2xl border border-slate-200 bg-white/50 px-5 py-3 text-sm font-bold hover:bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/20 dark:hover:bg-slate-900/30 cursor-pointer"
           >
-            📋 View My Complaints
+            <span className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span>View My Complaints</span>
+            </span>
           </Link>
         </div>
       </section>

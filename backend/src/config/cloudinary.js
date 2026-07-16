@@ -26,12 +26,14 @@ const connectCloudinary = async () => {
     throw new Error("CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are required");
   }
 
-  try {
-    console.log("Checking DNS resolution for Cloudinary host: api.cloudinary.com...");
-    await checkDnsResolution("api.cloudinary.com");
-    console.log("DNS resolution: OK");
-  } catch (dnsErr) {
-    throw new Error(`Cloudinary connection check failed: DNS lookup error. Details: ${dnsErr.message}`);
+  if (!process.env.VERCEL) {
+    try {
+      console.log("Checking DNS resolution for Cloudinary host: api.cloudinary.com...");
+      await checkDnsResolution("api.cloudinary.com");
+      console.log("DNS resolution: OK");
+    } catch (dnsErr) {
+      throw new Error(`Cloudinary connection check failed: DNS lookup error. Details: ${dnsErr.message}`);
+    }
   }
 
   cloudinary.config({
@@ -39,6 +41,11 @@ const connectCloudinary = async () => {
     api_key: apiKey,
     api_secret: apiSecret,
   });
+
+  if (process.env.VERCEL) {
+    isConnected = true;
+    return;
+  }
 
   try {
     const pingResult = await cloudinary.api.ping();

@@ -41,6 +41,7 @@ const createUser = asyncHandler(async (req, res) => {
     role,
     expertise: Array.isArray(expertise) ? expertise : [],
     isActive: true,
+    isVerified: true,
   });
 
   res.status(201).json({
