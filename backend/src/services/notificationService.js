@@ -42,4 +42,28 @@ const notifyAdmins = async ({ type, title, message, relatedIssue }) => {
 
 const notifyUser = async (params) => createNotification(params);
 
-module.exports = { createNotification, notifyAdmins, notifyUser };
+// Supervisors of a category get notified about their team's work
+// (assignments, resolutions) so they can monitor and review it.
+const notifySupervisors = async ({ category, excludeUserId, type, title, message, relatedIssue }) => {
+  if (!category) return [];
+  const supervisors = await User.find({
+    role: 'technician',
+    isActive: true,
+    supervisorCategories: category,
+  });
+  return Promise.all(
+    supervisors
+      .filter((supervisor) => !excludeUserId || supervisor._id.toString() !== excludeUserId.toString())
+      .map((supervisor) =>
+        createNotification({
+          userId: supervisor._id,
+          type,
+          title,
+          message,
+          relatedIssue,
+        })
+      )
+  );
+};
+
+module.exports = { createNotification, notifyAdmins, notifyUser, notifySupervisors };

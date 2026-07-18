@@ -14,7 +14,7 @@ export default function PublicAssetPage() {
 
   const [suggestion, setSuggestion] = useState(null);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
-  const { register, handleSubmit, watch, reset, setValue, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit, watch, reset, setValue, formState: { isSubmitting, errors } } = useForm({
     defaultValues: {
       title: '',
       description: '',
@@ -40,6 +40,15 @@ export default function PublicAssetPage() {
     queryKey: ['public-asset', code],
     queryFn: async () => (await api.get(`/assets/public/${code}`)).data,
   });
+
+  const assetCategory = assetQuery.data?.asset?.category;
+
+  // QR scan autofill: the scanned product's category pre-selects the complaint category.
+  useEffect(() => {
+    if (assetCategory) {
+      setValue('category', assetCategory, { shouldValidate: true });
+    }
+  }, [assetCategory, setValue]);
 
   const triageMutation = useMutation({
     mutationFn: async (payload) => (await api.post('/issues/triage', payload)).data.suggestion,
@@ -107,6 +116,23 @@ export default function PublicAssetPage() {
     });
   };
 
+  const onInvalid = () => {
+    toast.error('Please fill in the highlighted required fields');
+  };
+
+  // Object URLs are memoized per file selection and revoked on change/unmount
+  // so previews don't leak memory.
+  const evidencePreviews = useMemo(
+    () => evidenceFiles.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [evidenceFiles]
+  );
+  useEffect(() => {
+    return () => evidencePreviews.forEach(({ url }) => URL.revokeObjectURL(url));
+  }, [evidencePreviews]);
+
+  const fieldError = (name) =>
+    errors[name] ? <p className="mt-1 text-[11px] font-bold text-rose-600 ml-1">{errors[name].message}</p> : null;
+
   const publicUrl = useMemo(() => `${window.location.origin}/public/assets/${code}`, [code]);
 
   if (assetQuery.isLoading) {
@@ -136,7 +162,7 @@ export default function PublicAssetPage() {
             onClick={() => window.location.href = '/'}
             className="mt-6 w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3 text-xs font-bold text-white transition-all shadow dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
           >
-            Go back to dashboard
+            Go to MaintainIQ Home
           </button>
         </div>
       </div>
@@ -190,25 +216,27 @@ export default function PublicAssetPage() {
               {isRetired ? (
                 <p className="text-xs text-slate-400 italic">Fault reporting is disabled because the equipment is retired.</p>
               ) : (
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 text-xs">
+                <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4 text-xs">
                   <div>
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1">Describe Fault details</label>
-                    <textarea 
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200" 
-                      rows={4} 
-                      placeholder="Describe what is broken, loose cables, flickering screens, etc..." 
-                      {...register('description', { required: true })} 
+                    <textarea
+                      className={`w-full rounded-2xl border bg-slate-50/50 px-4 py-3 outline-none focus:border-ink-500 dark:bg-slate-950/60 dark:text-slate-200 ${errors.description ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-800'}`}
+                      rows={4}
+                      placeholder="Describe what is broken, loose cables, flickering screens, etc... (English ya Roman Urdu — AI dono samajhta hai)"
+                      {...register('description', { required: 'Please describe the fault' })}
                     />
+                    {fieldError('description')}
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Fault Title</label>
-                      <input className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60" placeholder="e.g. HDMI cable flickering" {...register('title')} />
+                      <input className={`w-full rounded-2xl border bg-slate-50/50 px-4 py-3 outline-none dark:bg-slate-950/60 ${errors.title ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-800'}`} placeholder="e.g. HDMI cable flickering" {...register('title', { required: 'A short title is required (or use AI triage)' })} />
+                      {fieldError('title')}
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Category</label>
-                      <select className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60 text-slate-700 dark:text-slate-200" {...register('category', { required: 'Category is required' })}>
+                      <select className={`w-full rounded-2xl border bg-slate-50/50 px-4 py-3 outline-none dark:bg-slate-950/60 text-slate-700 dark:text-slate-200 ${errors.category ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-800'}`} {...register('category', { required: 'Category is required' })}>
                         <option value="">Select Category</option>
                         <option value="Electronics / IT">Electronics / IT</option>
                         <option value="Electrical">Electrical</option>
@@ -218,10 +246,11 @@ export default function PublicAssetPage() {
                         <option value="Safety & Security">Safety & Security</option>
                         <option value="Lab Equipment">Lab Equipment</option>
                       </select>
+                      {fieldError('category')}
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Priority</label>
-                      <select className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60" {...register('priority')}>
+                      <select className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60 text-slate-700 dark:text-slate-200" {...register('priority')}>
                         <option>Low</option>
                         <option>Medium</option>
                         <option>High</option>
@@ -230,7 +259,8 @@ export default function PublicAssetPage() {
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Your Name</label>
-                      <input className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60" placeholder="Reporter name" {...register('reporterName', { required: true })} />
+                      <input className={`w-full rounded-2xl border bg-slate-50/50 px-4 py-3 outline-none dark:bg-slate-950/60 ${errors.reporterName ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-800'}`} placeholder="Reporter name" {...register('reporterName', { required: 'Your name is required' })} />
+                      {fieldError('reporterName')}
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Student / Member ID</label>
@@ -238,7 +268,8 @@ export default function PublicAssetPage() {
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 ml-1">Email address</label>
-                      <input className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 outline-none dark:border-slate-800 dark:bg-slate-950/60" placeholder="Optional contact email" {...register('reporterEmail')} />
+                      <input className={`w-full rounded-2xl border bg-slate-50/50 px-4 py-3 outline-none dark:bg-slate-950/60 ${errors.reporterEmail ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-800'}`} placeholder="Optional — get notified when it's fixed" {...register('reporterEmail', { validate: (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || 'Enter a valid email address' })} />
+                      {fieldError('reporterEmail')}
                     </div>
                   </div>
 
@@ -253,11 +284,11 @@ export default function PublicAssetPage() {
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs outline-none dark:border-slate-800 dark:bg-slate-950/60 file:mr-3 file:rounded-xl file:border-0 file:bg-ink-900 file:px-3 file:py-1.5 file:text-[10px] file:font-bold file:text-white dark:file:bg-white dark:file:text-ink-900 cursor-pointer" 
                       />
                     </label>
-                    {evidenceFiles.length > 0 && (
+                    {evidencePreviews.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {evidenceFiles.map((file, index) => (
+                        {evidencePreviews.map(({ file, url }, index) => (
                           <div key={`${file.name}-${index}`} className="relative border border-slate-200/50 dark:border-slate-800 rounded-xl overflow-hidden shrink-0">
-                            <img src={URL.createObjectURL(file)} alt={file.name} className="h-16 w-16 object-cover" />
+                            <img src={url} alt={file.name} className="h-16 w-16 object-cover" />
                             <button type="button" onClick={() => setEvidenceFiles(evidenceFiles.filter((_, i) => i !== index))} className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-rose-600 text-[10px] text-white">✕</button>
                           </div>
                         ))}
@@ -266,18 +297,24 @@ export default function PublicAssetPage() {
                   </div>
 
                   <div className="flex gap-3 pt-2">
-                    <button 
-                      type="button" 
-                      onClick={handleGenerateTriage} 
-                      className="rounded-2xl border border-slate-200 hover:bg-slate-50 px-4 py-3 font-semibold dark:border-slate-800 dark:hover:bg-slate-900 transition-all cursor-pointer"
+                    <button
+                      type="button"
+                      onClick={handleGenerateTriage}
+                      disabled={triageMutation.isPending}
+                      className="rounded-2xl border border-slate-200 hover:bg-slate-50 px-4 py-3 font-semibold dark:border-slate-800 dark:hover:bg-slate-900 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-wait"
                     >
-                      🔮 Ask AI Diagnostics Triage
+                      {triageMutation.isPending ? (
+                        <span className="flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+                          Diagnosing…
+                        </span>
+                      ) : '🔮 Ask AI Diagnostics Triage'}
                     </button>
-                    
-                    <button 
-                      disabled={isSubmitting || reportMutation.isPending} 
-                      type="submit" 
-                      className="flex-1 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3 font-bold text-white transition-all shadow dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer"
+
+                    <button
+                      disabled={isSubmitting || reportMutation.isPending}
+                      type="submit"
+                      className="flex-1 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3 font-bold text-white transition-all shadow dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer disabled:opacity-50"
                     >
                       {reportMutation.isPending ? 'Submitting Fault...' : 'Submit Fault Report'}
                     </button>
@@ -293,7 +330,16 @@ export default function PublicAssetPage() {
               <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display mb-4">AI Smart Triage Assistant</h2>
               {suggestion ? (
                 <div className="space-y-4 rounded-3xl border border-violet-200 bg-violet-50/20 p-5 dark:border-slate-850 dark:bg-slate-950/20 text-xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-600 dark:text-ink-300">✨ Automated triage diagnostics</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-600 dark:text-ink-300">✨ Automated triage diagnostics</span>
+                    <button
+                      type="button"
+                      onClick={() => { setSuggestion(null); toast('AI suggestion discarded — your own values will be submitted'); }}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:bg-white dark:border-slate-800 dark:hover:bg-slate-900 cursor-pointer"
+                    >
+                      ✕ Discard suggestion
+                    </button>
+                  </div>
                   
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Diagnostic Fault Title</label>
@@ -330,10 +376,31 @@ export default function PublicAssetPage() {
                       <strong>Triage Alert:</strong> {suggestion.warning}
                     </div>
                   )}
+
+                  {suggestion.recurringPattern && (
+                    <div className="rounded-xl bg-rose-50/50 border border-rose-100 p-3 text-[11px] text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/10 dark:text-rose-300 leading-normal">
+                      <strong>⚠ Recurring fault detected:</strong> {suggestion.recurringPattern}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 italic">
+                    AI output is advisory — review and edit the fields above before submitting. A qualified technician makes the final call.
+                  </p>
+                </div>
+              ) : triageMutation.isPending ? (
+                <div className="space-y-3 rounded-3xl border border-violet-200 bg-violet-50/20 p-5 dark:border-slate-800 dark:bg-slate-950/20 animate-pulse">
+                  <div className="flex items-center gap-2 text-xs font-bold text-ink-600 dark:text-ink-300">
+                    <span className="h-3.5 w-3.5 rounded-full border-2 border-ink-500 border-t-transparent animate-spin" />
+                    AI is analyzing the complaint and this asset's history…
+                  </div>
+                  <div className="h-3 w-3/4 rounded-full bg-slate-200/70 dark:bg-slate-800" />
+                  <div className="h-3 w-1/2 rounded-full bg-slate-200/70 dark:bg-slate-800" />
+                  <div className="h-3 w-2/3 rounded-full bg-slate-200/70 dark:bg-slate-800" />
+                  <div className="h-3 w-1/3 rounded-full bg-slate-200/70 dark:bg-slate-800" />
                 </div>
               ) : (
                 <p className="text-xs text-slate-450 italic py-10 text-center bg-slate-50/50 dark:bg-slate-950/10 border border-dashed border-slate-200 dark:border-slate-800 rounded-3xl">
-                  Submit a description of the fault and click "Ask AI Diagnostics Triage" to auto-complete category filters and diagnose probable issues.
+                  Submit a description of the fault and click "Ask AI Diagnostics Triage" to auto-complete category filters and diagnose probable issues. You can write in English or Roman Urdu.
                 </p>
               )}
             </div>

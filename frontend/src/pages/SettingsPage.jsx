@@ -60,6 +60,15 @@ export default function SettingsPage() {
       toast.error('Name cannot be empty');
       return;
     }
+    // Pakistani contact format: 12 digits starting with 92, or 11 digits starting with 0.
+    if (phone.trim()) {
+      const digits = phone.replace(/[^\d]/g, '');
+      const valid = (digits.startsWith('92') && digits.length === 12) || (digits.startsWith('0') && digits.length === 11);
+      if (!valid) {
+        toast.error('Phone must be 12 digits starting with 92 (923001234567) or 11 digits starting with 0 (03001234567)');
+        return;
+      }
+    }
     updateProfileMutation.mutate({
       name,
       phone,

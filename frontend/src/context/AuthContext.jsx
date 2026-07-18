@@ -14,7 +14,12 @@ export function AuthProvider({ children }) {
         const response = await api.get('/auth/me');
         return response.data.user;
       } catch (error) {
-        localStorage.removeItem('token');
+        // Only drop the token when the server actually rejects it —
+        // a transient network error/backend restart must not log everyone out.
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('token');
+        }
         throw error;
       }
     },
@@ -23,7 +28,9 @@ export function AuthProvider({ children }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => api.post('/auth/logout'),
-    onSuccess: () => {
+    // Cleanup runs even if the logout request fails (server down) —
+    // the user must always be able to log out locally.
+    onSettled: () => {
       localStorage.removeItem('token');
       queryClient.setQueryData(AUTH_QUERY_KEY, null);
       queryClient.removeQueries({ queryKey: AUTH_QUERY_KEY });
@@ -37,7 +44,11 @@ export function AuthProvider({ children }) {
     setUser: (user) => queryClient.setQueryData(AUTH_QUERY_KEY, user),
     refreshUser: () => queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY }),
     logout: async () => {
-      await logoutMutation.mutateAsync();
+      try {
+        await logoutMutation.mutateAsync();
+      } catch {
+        // Local cleanup already happened in onSettled; a failed server call is non-fatal.
+      }
     },
   };
 

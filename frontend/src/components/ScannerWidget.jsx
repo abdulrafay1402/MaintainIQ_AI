@@ -3,38 +3,45 @@ import { Html5Qrcode } from 'html5-qrcode';
 
 export default function ScannerWidget({ onScan }) {
   const regionId = 'qr-reader';
-  const scannerRef = useRef(null);
   const [error, setError] = useState('');
 
+  // The latest onScan lives in a ref so the effect never depends on the
+  // callback's identity — otherwise every parent re-render (e.g. typing in the
+  // manual-code input) would tear down and restart the camera.
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+
   useEffect(() => {
-    let scanner;
+    const scanner = new Html5Qrcode(regionId);
 
-    const start = async () => {
-      try {
-        scanner = new Html5Qrcode(regionId);
-        scannerRef.current = scanner;
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
-          async (decodedText) => {
+    const startPromise = scanner
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        async (decodedText) => {
+          try {
             await scanner.stop();
-            onScan(decodedText);
-          },
-          () => {}
-        );
-      } catch (scanError) {
-        setError(scanError.message || 'Unable to start scanner');
-      }
-    };
-
-    start();
+          } catch {
+            // Already stopped — safe to ignore.
+          }
+          onScanRef.current(decodedText);
+        },
+        () => {}
+      )
+      .catch((scanError) => {
+        setError(scanError?.message || 'Unable to start scanner');
+      });
 
     return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(() => {});
-      }
+      // Wait for start() to settle before stopping, so a StrictMode
+      // double-mount can't leave an orphaned camera stream running.
+      startPromise.then(() => {
+        if (scanner.isScanning) {
+          scanner.stop().catch(() => {});
+        }
+      });
     };
-  }, [onScan]);
+  }, []);
 
   return <div className="space-y-3">
     <div id={regionId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />

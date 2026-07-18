@@ -3,6 +3,7 @@ const {
   listIssues,
   listMyIssues,
   listAssignedIssues,
+  listTeamIssues,
   getIssueById,
   reportPublicIssue,
   assignIssue,
@@ -23,11 +24,13 @@ router.post('/triage', publicReportLimiter, triageIssue);
 router.get('/', protect, listIssues);
 router.get('/my', protect, listMyIssues);
 router.get('/assigned', protect, listAssignedIssues);
+router.get('/team', protect, authorizeRoles('technician'), listTeamIssues);
 router.get('/:id', protect, getIssueById);
 router.get('/:id/recommendations', protect, authorizeRoles('admin'), getTechnicianRecommendations);
 router.patch('/:id/assign', protect, authorizeRoles('admin'), assignIssue);
 router.patch('/:id/status', protect, updateIssueStatus);
 router.patch('/:id/claim', protect, authorizeRoles('technician', 'admin'), claimIssue);
-router.post('/:id/maintenance', protect, authorizeRoles('admin', 'technician'), addMaintenanceRecord);
+// Multipart: technicians attach evidence photos of the completed work.
+router.post('/:id/maintenance', protect, authorizeRoles('admin', 'technician'), uploadEvidence.array('evidence', 5), addMaintenanceRecord);
 
 module.exports = router;

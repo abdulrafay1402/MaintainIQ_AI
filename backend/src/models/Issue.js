@@ -75,6 +75,9 @@ const issueSchema = new mongoose.Schema(
       trim: true,
     },
     acceptedAt: Date,
+    // Stamped on the Assigned -> Inspection Started transition; used to
+    // auto-fill the technician's work-start date in the maintenance form.
+    inspectionStartedAt: Date,
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -101,9 +104,13 @@ const issueSchema = new mongoose.Schema(
       possibleCauses: [String],
       initialChecks: [String],
       warning: String,
+      recurringPattern: String,
       reviewedByUser: { type: Boolean, default: false },
     },
     evidence: [String],
+    // Photos uploaded by the technician as proof of completed maintenance
+    // (kept separate from the reporter's complaint evidence above).
+    maintenanceEvidence: [String],
     maintenanceNotes: {
       type: String,
       trim: true,
@@ -142,5 +149,12 @@ const issueSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Hot-path indexes: per-asset lookups (public page, history, spend aggregation),
+// technician task lists, and category/status filters.
+issueSchema.index({ asset: 1, createdAt: -1 });
+issueSchema.index({ assignedTechnician: 1, status: 1 });
+issueSchema.index({ category: 1, status: 1 });
+issueSchema.index({ reporterId: 1 });
 
 module.exports = mongoose.model('Issue', issueSchema);

@@ -9,7 +9,7 @@ import { useTheme } from '../context/ThemeContext';
 const Icons = {
   Dashboard: () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v-2a2 2 0 01-2 2h-2a2 2 0 01-2-2v2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 14a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
     </svg>
   ),
   Scan: () => (
@@ -34,8 +34,7 @@ const Icons = {
   ),
   Tasks: () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6m-6 4h6" />
     </svg>
   ),
   Settings: () => (
@@ -80,6 +79,7 @@ const menuByRole = {
   student: [
     { to: '/student/dashboard', label: 'Dashboard', icon: Icons.Dashboard },
     { to: '/student/scan', label: 'Scan QR', icon: Icons.Scan },
+    { to: '/equipment', label: 'Equipment', icon: Icons.Equipment },
     { to: '/student/complaints', label: 'My Complaints', icon: Icons.Complaints },
     { to: '/settings', label: 'Settings', icon: Icons.Settings },
   ],
@@ -93,6 +93,8 @@ const menuByRole = {
   technician: [
     { to: '/technician/dashboard', label: 'Dashboard', icon: Icons.Dashboard },
     { to: '/technician/tasks', label: 'My Tasks', icon: Icons.Tasks },
+    { to: '/technician/team', label: 'Team', icon: Icons.Staff },
+    { to: '/equipment', label: 'Equipment', icon: Icons.Equipment },
     { to: '/settings', label: 'Settings', icon: Icons.Settings },
   ],
 };
@@ -139,6 +141,40 @@ export default function DashboardLayout() {
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
+  const renderNotificationsPanel = (positionClass) => (
+    <div className={`absolute z-35 mt-3 w-80 max-w-[calc(100vw-2rem)] rounded-[1.5rem] border border-slate-200 bg-white/95 p-4 shadow-soft backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 ${positionClass}`}>
+      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</p>
+        {unreadCount > 0 ? (
+          <button
+            onClick={() => markAllReadMutation.mutate()}
+            className="text-xs font-semibold text-ink-600 hover:text-ink-700 underline underline-offset-2 dark:text-ink-300"
+          >
+            Mark all read
+          </button>
+        ) : null}
+      </div>
+      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+        {notifications.length > 0 ? notifications.slice(0, 10).map((item) => (
+          <div
+            key={item._id}
+            className={`rounded-xl border p-3 text-xs transition ${
+              item.isRead
+                ? 'border-slate-100 text-slate-400 dark:border-slate-800/60'
+                : 'border-ink-200/60 bg-ink-50/20 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-350'
+            }`}
+          >
+            <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
+            <p className="mt-1 leading-normal">{item.message}</p>
+            <p className="mt-1 text-[9px] text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
+          </div>
+        )) : (
+          <p className="py-6 text-center text-xs text-slate-400">No new notifications</p>
+        )}
+      </div>
+    </div>
+  );
+
   const renderAsideContent = () => (
     <>
       <div className="flex flex-col">
@@ -177,39 +213,7 @@ export default function DashboardLayout() {
                 ) : null}
               </button>
 
-              {showNotifications ? (
-                <div className="absolute right-0 z-35 mt-3 w-80 rounded-[1.5rem] border border-slate-200 bg-white/95 p-4 shadow-soft backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 lg:left-0 lg:right-auto">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</p>
-                    {unreadCount > 0 ? (
-                      <button 
-                        onClick={() => markAllReadMutation.mutate()} 
-                        className="text-xs font-semibold text-ink-600 hover:text-ink-700 underline underline-offset-2 dark:text-ink-300"
-                      >
-                        Mark all read
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                    {notifications.length > 0 ? notifications.slice(0, 10).map((item) => (
-                      <div 
-                        key={item._id} 
-                        className={`rounded-xl border p-3 text-xs transition ${
-                          item.isRead 
-                            ? 'border-slate-100 text-slate-400 dark:border-slate-800/60' 
-                            : 'border-ink-200/60 bg-ink-50/20 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-350'
-                        }`}
-                      >
-                        <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
-                        <p className="mt-1 leading-normal">{item.message}</p>
-                        <p className="mt-1 text-[9px] text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
-                      </div>
-                    )) : (
-                      <p className="py-6 text-center text-xs text-slate-400">No new notifications</p>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+              {showNotifications ? renderNotificationsPanel('right-0 lg:left-0 lg:right-auto') : null}
             </div>
           </div>
         </div>
@@ -284,12 +288,29 @@ export default function DashboardLayout() {
         
         <div className="flex items-center gap-2">
           {/* Theme Toggle (Mobile) */}
-          <button 
-            onClick={theme.toggleTheme} 
+          <button
+            onClick={theme.toggleTheme}
             className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200/80 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 text-xs hover:bg-slate-100"
           >
             {theme.isDark ? <Icons.Sun /> : <Icons.Moon />}
           </button>
+
+          {/* Notifications Bell (Mobile) */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative grid h-9 w-9 place-items-center rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
+              aria-label="Notifications"
+            >
+              <Icons.Bell />
+              {unreadCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white animate-pulse">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              ) : null}
+            </button>
+            {showNotifications ? renderNotificationsPanel('right-0') : null}
+          </div>
 
           {/* User Profile Avatar (Mobile) */}
           <button 

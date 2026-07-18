@@ -41,7 +41,20 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Public signups wait for admin approval; admin-created accounts and all
+    // pre-existing users default to 'approved' (schema default applies on read).
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved',
+    },
     expertise: {
+      type: [String],
+      default: [],
+    },
+    // A technician with one or more supervisor categories is that department's
+    // supervisor: they can verify/reopen resolved work and monitor the team.
+    supervisorCategories: {
       type: [String],
       default: [],
     },

@@ -61,7 +61,7 @@ export function AssetLabelPage() {
         }
       `}</style>
       <div className="label-print-actions mb-6 flex gap-3">
-        <button onClick={() => navigate(-1)} className="rounded-xl border px-4 py-2 text-sm">Back</button>
+        <button onClick={() => navigate(-1)} className="group inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:border-ink-500 hover:text-ink-600 transition-all cursor-pointer print:hidden"><span className="transition-transform group-hover:-translate-x-1">←</span> Back</button>
         <button onClick={() => window.print()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">Print label</button>
       </div>
       <div className="mx-auto max-w-sm">
@@ -104,7 +104,7 @@ export function AssetLabelSheetPage() {
         }
       `}</style>
       <div className="label-print-actions mb-6 flex gap-3">
-        <button onClick={() => navigate(-1)} className="rounded-xl border px-4 py-2 text-sm">Back</button>
+        <button onClick={() => navigate(-1)} className="group inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:border-ink-500 hover:text-ink-600 transition-all cursor-pointer print:hidden"><span className="transition-transform group-hover:-translate-x-1">←</span> Back</button>
         <button onClick={() => window.print()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">Print label sheet ({assets.length})</button>
       </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

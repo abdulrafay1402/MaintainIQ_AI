@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api';
 import StatusBadge from '../../components/StatusBadge';
+import StatusProgress from '../../components/StatusProgress';
 
 export default function StudentComplaintsPage() {
   const { data, isLoading } = useQuery({
@@ -39,6 +40,11 @@ export default function StudentComplaintsPage() {
                 </p>
               </div>
               <StatusBadge value={issue.status} />
+            </div>
+
+            {/* Live lifecycle progress */}
+            <div className="px-1 pt-1">
+              <StatusProgress status={issue.status} />
             </div>
 
             {/* Description */}

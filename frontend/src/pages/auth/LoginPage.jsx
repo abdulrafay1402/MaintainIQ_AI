@@ -25,11 +25,13 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, formState: { errors, isSubmitting, isValid } } = useForm({
+    mode: 'onChange',
     defaultValues: { email: '', password: '' }
   });
 
   const [verificationPending, setVerificationPending] = useState(false);
+  const [approvalPending, setApprovalPending] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [codeValue, setCodeValue] = useState('');
 
@@ -49,14 +51,26 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  // Already-authenticated visitors go straight to their dashboard.
+  useEffect(() => {
+    const role = auth?.user?.role;
+    if (!role) return;
+    navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
+  }, [auth?.user?.role, navigate]);
+
   const loginMutation = useMutation({
     mutationFn: async (values) => api.post('/auth/login', values),
     onSuccess: (response) => {
+      // Self-registered account still waiting for the admin's decision.
+      if (response.data.status === 'approval_pending') {
+        setApprovalPending(true);
+        return;
+      }
       if (response.data.status === 'verification_pending') {
         setVerificationEmail(response.data.email);
         setVerificationPending(true);
-        setResendCooldown(60);
-        toast.success('Please verify your email address to log in');
+        setResendCooldown(30);
+        toast.success('Verification code sent — it expires in 1 minute');
         return;
       }
       if (response.data.token) {
@@ -64,6 +78,9 @@ export default function LoginPage() {
       }
       queryClient.setQueryData(['auth', 'me'], response.data.user);
       auth.setUser(response.data.user);
+      // The login payload only carries id/name/email/role — pull the full
+      // profile (phone, department, studentId, 2FA) so Settings never shows blanks.
+      auth.refreshUser();
       toast.success('Welcome back');
       const role = response.data.user.role;
       navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
@@ -116,11 +133,17 @@ export default function LoginPage() {
   const verifyMutation = useMutation({
     mutationFn: async ({ email, code }) => api.post('/auth/verify-otp', { email, code }),
     onSuccess: (response) => {
+      if (response.data.status === 'approval_pending') {
+        setVerificationPending(false);
+        setApprovalPending(true);
+        return;
+      }
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
       queryClient.setQueryData(['auth', 'me'], response.data.user);
       auth.setUser(response.data.user);
+      auth.refreshUser();
       toast.success('Welcome back');
       const role = response.data.user.role;
       navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
@@ -151,6 +174,29 @@ export default function LoginPage() {
     }
     verifyMutation.mutate({ email: verificationEmail, code: codeValue });
   };
+
+  // ── Awaiting admin approval ────────────────────────────────────────────────
+  if (approvalPending) {
+    return (
+      <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
+        <div className="glow-orb bg-ink-400 h-96 w-96 -top-32 -left-32 dark:bg-ink-600/30" />
+        <div className="relative mx-auto max-w-md w-full rounded-[2.5rem] border border-slate-200 bg-white/60 p-8 shadow-premium backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60 z-10 text-center">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-amber-100 text-2xl dark:bg-amber-950/40">⏳</span>
+          <h2 className="mt-4 text-2xl font-bold tracking-tight font-display">Request in progress</h2>
+          <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400 leading-relaxed">
+            Your account request is verified and is now <strong>waiting for admin approval</strong>.
+            You'll receive an email when it's accepted — then you can log in.
+          </p>
+          <button
+            onClick={() => setApprovalPending(false)}
+            className="mt-6 w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3 text-sm font-bold text-white dark:bg-white dark:text-ink-900 cursor-pointer"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── OTP verification pending step ──────────────────────────────────────────
   if (verificationPending) {
@@ -451,8 +497,8 @@ export default function LoginPage() {
             </div>
 
             <button
-              disabled={isSubmitting || loginMutation.isPending}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2"
+              disabled={!isValid || isSubmitting || loginMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSubmitting || loginMutation.isPending ? (
                 <span className="flex items-center gap-2">

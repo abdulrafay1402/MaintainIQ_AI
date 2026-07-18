@@ -1,17 +1,58 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../../api';
+import BarList from '../../components/BarList';
+import PieChart from '../../components/PieChart';
 import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
+
+const STATUS_COLORS = {
+  Assigned: '#0ea5e9',
+  'Inspection Started': '#6366f1',
+  'Maintenance In Progress': '#f97316',
+  'Waiting for Parts': '#eab308',
+  Resolved: '#10b981',
+  Verified: '#14b8a6',
+  Closed: '#94a3b8',
+  Reopened: '#d946ef',
+};
+
+const STATUS_DOTS = {
+  Assigned: 'bg-sky-500',
+  'Inspection Started': 'bg-indigo-500',
+  'Maintenance In Progress': 'bg-orange-500',
+  'Waiting for Parts': 'bg-yellow-500',
+  Resolved: 'bg-emerald-500',
+  Verified: 'bg-teal-500',
+  Closed: 'bg-slate-400',
+  Reopened: 'bg-fuchsia-500',
+};
 
 export default function TechnicianDashboardPage() {
-  const { data: tasks = [] } = useQuery({ 
-    queryKey: ['assigned-issues'], 
-    queryFn: async () => (await api.get('/issues/assigned')).data.issues 
+  const auth = useAuth();
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['assigned-issues'],
+    queryFn: async () => (await api.get('/issues/assigned')).data.issues
   });
-  
+
   const completedTasks = tasks.filter((issue) => ['Resolved', 'Verified', 'Closed'].includes(issue.status));
   const completed = completedTasks.length;
   const pending = tasks.length - completed;
+
+  const statusRows = Object.entries(
+    tasks.reduce((acc, issue) => {
+      acc[issue.status] = (acc[issue.status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+
+  const categoryRows = Object.entries(
+    tasks.reduce((acc, issue) => {
+      const key = issue.category || 'General';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
 
   const repairDurations = completedTasks
     .map((issue) => Number(issue.durationHours))
@@ -41,6 +82,45 @@ export default function TechnicianDashboardPage() {
         <StatCard label="Pending repairs" value={pending} hint="Awaiting field inspection or fix" />
         <StatCard label="Completed work" value={completed} hint="Resolved and verified orders" />
         <StatCard label="Avg Repair Time" value={averageRepairTime} hint="Average speed of resolved tasks" />
+      </div>
+
+      {auth.user?.supervisorCategories?.length ? (
+        <section className="rounded-2xl border border-indigo-200/60 bg-indigo-50/30 p-4 text-xs font-semibold text-indigo-800 dark:border-indigo-900/30 dark:bg-indigo-950/20 dark:text-indigo-300">
+          ⭐ You supervise <strong>{auth.user.supervisorCategories.join(', ')}</strong> — team assignments and completed work notifications appear in your bell, and the review queue lives in the <a href="/technician/team" className="underline font-bold">Team</a> tab.
+        </section>
+      ) : null}
+
+      {/* Analytics */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <BarList
+          title="My tasks by status"
+          subtitle="Where your work orders currently stand"
+          rows={statusRows}
+          dotFor={(label) => STATUS_DOTS[label]}
+        />
+        <BarList
+          title="My tasks by category"
+          subtitle="The departments your work falls under"
+          rows={categoryRows}
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PieChart
+          title="My workload distribution"
+          subtitle="Share of tasks per lifecycle stage"
+          rows={statusRows}
+          colorFor={(label) => STATUS_COLORS[label]}
+        />
+        <PieChart
+          title="My repair spend by category"
+          subtitle={`Total maintenance value handled: ${completedTasks.reduce((sum, issue) => sum + (issue.maintenanceCost || 0), 0).toLocaleString()}`}
+          rows={Object.entries(completedTasks.reduce((acc, issue) => {
+            const key = issue.category || 'General';
+            acc[key] = (acc[key] || 0) + (issue.maintenanceCost || 0);
+            return acc;
+          }, {})).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)}
+        />
       </div>
 
       {/* Recent Repairs Cards */}

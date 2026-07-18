@@ -3,10 +3,73 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MaintainIQ</title>
+    <meta name="description" content="MaintainIQ — AI-powered QR maintenance & asset history platform. Scan. Report. Diagnose. Maintain." />
+    <meta name="theme-color" content="#070E13" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Social sharing cards (LinkedIn demo post, WhatsApp links) -->
+    <meta property="og:title" content="MaintainIQ — AI-Powered QR Maintenance Platform" />
+    <meta property="og:description" content="Every asset gets a digital identity. Scan a QR, report in English or Roman Urdu, let AI triage it, and track the repair to a tamper-proof history." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://maintain-iq-ai.vercel.app" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="MaintainIQ — AI-Powered QR Maintenance Platform" />
+    <meta name="twitter:description" content="Scan. Report. Diagnose. Maintain. AI triage with Roman Urdu support and tamper-proof asset history." />
+    <title>MaintainIQ — Scan. Report. Diagnose. Maintain.</title>
+    <style>
+      /* Pre-React boot screen: shows instantly, replaced when the app mounts. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #0a141a 0%, #060c11 100%);
+        z-index: 9999;
+        font-family: system-ui, sans-serif;
+      }
+      #boot .frame {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+        border: 3px solid rgba(45, 212, 191, 0.25);
+        position: relative;
+        overflow: hidden;
+      }
+      #boot .frame::after {
+        content: '';
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 6px;
+        height: 3px;
+        border-radius: 99px;
+        background: #2dd4bf;
+        box-shadow: 0 0 14px 2px rgba(45, 212, 191, 0.55);
+        animation: bootscan 1.4s ease-in-out infinite alternate;
+      }
+      #boot p {
+        margin-top: 18px;
+        color: #2dd4bf;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        text-align: center;
+      }
+      @keyframes bootscan {
+        to { transform: translateY(46px); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <div>
+          <div class="frame"></div>
+          <p>MaintainIQ</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

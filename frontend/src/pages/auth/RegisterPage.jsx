@@ -6,16 +6,6 @@ import toast from 'react-hot-toast';
 import api from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
-const EXPERTISE_OPTIONS = [
-  'Electronics / IT',
-  'Electrical',
-  'HVAC / Air Conditioning',
-  'Plumbing',
-  'Mechanical / Furniture',
-  'Safety & Security',
-  'Lab Equipment'
-];
-
 // ── Icons ─────────────────────────────────────────────────────────────────────
 function EyeIcon({ open }) {
   return open ? (
@@ -31,6 +21,8 @@ function EyeIcon({ open }) {
   );
 }
 
+const EXPERTISE_OPTIONS = ['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'];
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -38,6 +30,7 @@ export default function RegisterPage() {
 
   const [selectedRole, setSelectedRole] = useState('student'); // 'student' or 'technician'
   const [verificationPending, setVerificationPending] = useState(false);
+  const [approvalPending, setApprovalPending] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [codeValue, setCodeValue] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -51,35 +44,34 @@ export default function RegisterPage() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { name: '', email: '', password: '', studentId: '', role: 'student', expertise: [] }
+  // Already-authenticated visitors go straight to their dashboard.
+  useEffect(() => {
+    const role = auth?.user?.role;
+    if (!role) return;
+    navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
+  }, [auth?.user?.role, navigate]);
+
+  const { register, handleSubmit, formState: { errors, isSubmitting, isValid } } = useForm({
+    mode: 'onChange',
+    defaultValues: { name: '', email: '', password: '', studentId: '', expertise: [] }
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (values) => {
-      const data = {
-        ...values,
-        role: selectedRole,
-        expertise: selectedRole === 'technician' ? values.expertise : []
-      };
-      return api.post('/auth/register', data);
-    },
+    mutationFn: async (values) => api.post('/auth/register', {
+      ...values,
+      role: selectedRole,
+      expertise: selectedRole === 'technician' ? values.expertise : [],
+    }),
     onSuccess: (response) => {
       if (response.data.status === 'verification_pending') {
         setVerificationEmail(response.data.email);
         setVerificationPending(true);
-        setResendCooldown(60);
-        toast.success('Verification code sent to your email!');
+        setResendCooldown(30);
+        toast.success(response.data.emailSent === false
+          ? 'Account created — use Resend to get your code'
+          : 'Verification code sent — it expires in 1 minute!');
         return;
       }
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-      }
-      queryClient.setQueryData(['auth', 'me'], response.data.user);
-      auth.setUser(response.data.user);
-      toast.success(`${response.data.user.role.charAt(0).toUpperCase() + response.data.user.role.slice(1)} account created!`);
-      const role = response.data.user.role;
-      navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
     },
     onError: (error) => {
       toast.error(error?.response?.data?.message || 'Registration failed');
@@ -89,11 +81,18 @@ export default function RegisterPage() {
   const verifyMutation = useMutation({
     mutationFn: async ({ email, code }) => api.post('/auth/verify-otp', { email, code }),
     onSuccess: (response) => {
+      // Self-registered accounts wait for admin approval after email verification.
+      if (response.data.status === 'approval_pending') {
+        setVerificationPending(false);
+        setApprovalPending(true);
+        return;
+      }
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
       queryClient.setQueryData(['auth', 'me'], response.data.user);
       auth.setUser(response.data.user);
+      auth.refreshUser();
       toast.success('Email verified successfully!');
       const role = response.data.user.role;
       navigate(role === 'admin' ? '/admin/dashboard' : role === 'technician' ? '/technician/dashboard' : '/student/dashboard', { replace: true });
@@ -106,8 +105,8 @@ export default function RegisterPage() {
   const resendMutation = useMutation({
     mutationFn: async (email) => api.post('/auth/resend-otp', { email }),
     onSuccess: () => {
-      toast.success('A new verification code has been sent');
-      setResendCooldown(60);
+      toast.success('A new verification code has been sent (expires in 1 minute)');
+      setResendCooldown(30);
     },
     onError: (error) => {
       toast.error(error?.response?.data?.message || 'Could not resend code');
@@ -122,6 +121,26 @@ export default function RegisterPage() {
     }
     verifyMutation.mutate({ email: verificationEmail, code: codeValue });
   };
+
+  // ── Awaiting admin approval ────────────────────────────────────────────────
+  if (approvalPending) {
+    return (
+      <div className="relative grid min-h-screen place-items-center bg-hero-grid px-4 py-16 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
+        <div className="glow-orb bg-ink-400 h-96 w-96 -top-32 -left-32 dark:bg-ink-600/30" />
+        <div className="relative mx-auto max-w-md w-full rounded-[2.5rem] border border-slate-200 bg-white/60 p-8 shadow-premium backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/60 z-10 text-center">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-amber-100 text-2xl dark:bg-amber-950/40">⏳</span>
+          <h2 className="mt-4 text-2xl font-bold tracking-tight font-display">Request in progress</h2>
+          <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400 leading-relaxed">
+            Your email is verified! Your <strong>{selectedRole}</strong> account request now needs approval by the administrator.
+            You'll receive an email as soon as it's accepted — then you can log in.
+          </p>
+          <Link to="/login" className="mt-6 inline-block w-full rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3 text-sm font-bold text-white dark:bg-white dark:text-ink-900">
+            Back to Login
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // ── OTP Verification pending step ──────────────────────────────────────────
   if (verificationPending) {
@@ -227,7 +246,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit((values) => registerMutation.mutateAsync(values))} className="mt-6 space-y-4">
 
-            {/* Role Selection Tabs */}
+            {/* Role selection — students and technicians can self-register (admin approval required) */}
             <div>
               <label className="text-xs font-bold text-[#475569] dark:text-[#cbd5e1] uppercase tracking-wider block mb-2">Register as</label>
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-950/60 rounded-2xl border border-slate-200/50 dark:border-slate-800">
@@ -246,6 +265,10 @@ export default function RegisterPage() {
                   Technician
                 </button>
               </div>
+              <p className="mt-2 text-[10px] font-semibold text-slate-400 leading-relaxed">
+                After email verification, self-registered accounts need <strong>admin approval</strong> before first login.
+                {selectedRole === 'student' ? ' Students get email 2FA on by default (can be turned off in Settings).' : ''}
+              </p>
             </div>
 
             <div>
@@ -274,23 +297,19 @@ export default function RegisterPage() {
               {errors.email ? <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400 ml-1">{errors.email.message}</p> : null}
             </div>
 
-            {/* Student ID field visible only for Student role */}
-            {selectedRole === 'student' && (
+            {selectedRole === 'student' ? (
               <div>
                 <label className="text-xs font-bold text-[#475569] dark:text-[#cbd5e1] uppercase tracking-wider block mb-1">Student ID / Member ID</label>
                 <input
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-505"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-ink-500 dark:border-slate-800 dark:bg-slate-950/60 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="STU-12345"
                   {...register('studentId', { required: selectedRole === 'student' ? 'Student ID is required' : false })}
                 />
                 {errors.studentId ? <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400 ml-1">{errors.studentId.message}</p> : null}
               </div>
-            )}
-
-            {/* Expertise tag mapping visible only for Technician role */}
-            {selectedRole === 'technician' && (
+            ) : (
               <div className="space-y-2 rounded-2xl border border-slate-150 p-4 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#475569] dark:text-[#cbd5e1]">Expertise tags (Check all that apply)</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#475569] dark:text-[#cbd5e1]">Expertise tags (check all that apply)</p>
                 <div className="grid grid-cols-1 gap-2 text-xs text-slate-800 dark:text-slate-100 sm:grid-cols-2">
                   {EXPERTISE_OPTIONS.map((category) => (
                     <label key={category} className="flex items-center gap-2 cursor-pointer py-0.5">
@@ -331,15 +350,15 @@ export default function RegisterPage() {
             </div>
 
             <button
-              disabled={isSubmitting || registerMutation.isPending}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2"
+              disabled={!isValid || isSubmitting || registerMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-ink-900 hover:bg-ink-850 px-4 py-3.5 text-sm font-bold text-white transition-all shadow-md active:scale-[0.98] dark:bg-white dark:text-ink-900 dark:hover:bg-slate-100 cursor-pointer mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSubmitting || registerMutation.isPending ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 border-2 border-white/35 border-t-white rounded-full animate-spin-smooth" />
                   Creating account...
                 </span>
-              ) : 'Create account'}
+              ) : !isValid ? 'Fill all required fields to continue' : 'Create account'}
             </button>
           </form>
 

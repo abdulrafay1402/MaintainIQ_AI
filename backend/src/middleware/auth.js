@@ -25,6 +25,14 @@ const protect = async (req, res, next) => {
       return next(new ApiError(401, 'User not found'));
     }
 
+    // A token is not enough — the account must also still be active and approved.
+    if (!user.isActive) {
+      return next(new ApiError(403, 'This account has been deactivated'));
+    }
+    if (user.approvalStatus && user.approvalStatus !== 'approved') {
+      return next(new ApiError(403, 'Your account is awaiting admin approval'));
+    }
+
     req.user = user;
     next();
   } catch (error) {

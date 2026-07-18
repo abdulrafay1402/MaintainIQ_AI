@@ -1,8 +1,34 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../api';
+import BarList from '../../components/BarList';
+import PieChart from '../../components/PieChart';
 import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
+
+const STATUS_PIE_COLORS = {
+  Reported: '#f59e0b',
+  Assigned: '#0ea5e9',
+  'Inspection Started': '#6366f1',
+  'Maintenance In Progress': '#f97316',
+  'Waiting for Parts': '#eab308',
+  Resolved: '#10b981',
+  Verified: '#14b8a6',
+  Closed: '#94a3b8',
+  Reopened: '#d946ef',
+};
+
+const STATUS_DOTS = {
+  Reported: 'bg-amber-500',
+  Assigned: 'bg-sky-500',
+  'Inspection Started': 'bg-indigo-500',
+  'Maintenance In Progress': 'bg-orange-500',
+  'Waiting for Parts': 'bg-yellow-500',
+  Resolved: 'bg-emerald-500',
+  Verified: 'bg-teal-500',
+  Closed: 'bg-slate-400',
+  Reopened: 'bg-fuchsia-500',
+};
 
 export default function StudentDashboardPage() {
   const { data, isLoading } = useQuery({
@@ -13,6 +39,13 @@ export default function StudentDashboardPage() {
   const complaints = data || [];
   const pending = complaints.filter((issue) => ['Reported', 'Assigned', 'Inspection Started', 'Maintenance In Progress', 'Waiting for Parts'].includes(issue.status)).length;
   const completed = complaints.filter((issue) => ['Resolved', 'Verified', 'Closed'].includes(issue.status)).length;
+
+  const statusRows = Object.entries(
+    complaints.reduce((acc, issue) => {
+      acc[issue.status] = (acc[issue.status] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
 
   return (
     <div className="space-y-6">
@@ -52,6 +85,24 @@ export default function StudentDashboardPage() {
           </Link>
         </div>
       </section>
+
+      {/* Analytics */}
+      {statusRows.length > 0 ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <BarList
+            title="My complaints by status"
+            subtitle="Live view of where each of your reports stands"
+            rows={statusRows}
+            dotFor={(label) => STATUS_DOTS[label]}
+          />
+          <PieChart
+            title="My complaints distribution"
+            subtitle="Share of your reports per lifecycle stage"
+            rows={statusRows}
+            colorFor={(label) => STATUS_PIE_COLORS[label]}
+          />
+        </div>
+      ) : null}
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-3">

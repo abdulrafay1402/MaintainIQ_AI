@@ -8,8 +8,34 @@ const { findAssetByIdentifier } = require('../utils/assetLookup');
 const { toPublicAssetDto, toPublicIssueActivityDto } = require('../utils/publicDtos');
 const { appCache, invalidateAssetCache } = require('../utils/cache');
 
+// QR/public links point at CLIENT_URL when set; otherwise the deployed frontend
+// in production and localhost only during local development.
+const FRONTEND_FALLBACK = process.env.VERCEL ? 'https://maintain-iq-ai.vercel.app' : 'http://localhost:5173';
+
 const getPublicAssetUrl = (publicId) => {
-  return `${process.env.CLIENT_URL || 'http://localhost:5173'}/public/assets/${publicId}`;
+  return `${process.env.CLIENT_URL || FRONTEND_FALLBACK}/public/assets/${publicId}`;
+};
+
+// Asset date rules: purchase/last-service can never be in the future, and the
+// next service must be scheduled for today or a future day (never already passed).
+const validateAssetDates = ({ purchaseDate, lastServiceDate, nextServiceDate }) => {
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  if (purchaseDate && new Date(purchaseDate) > endOfToday) {
+    throw new ApiError(400, 'Purchase date cannot be in the future');
+  }
+  if (lastServiceDate && new Date(lastServiceDate) > endOfToday) {
+    throw new ApiError(400, 'Last service date cannot be in the future');
+  }
+  if (nextServiceDate && new Date(nextServiceDate) < startOfToday) {
+    throw new ApiError(400, 'Next service date must be today or a future date — it cannot be a date that has already passed');
+  }
+  if (lastServiceDate && nextServiceDate && new Date(nextServiceDate) < new Date(lastServiceDate)) {
+    throw new ApiError(400, 'Next service date cannot be before the last service date');
+  }
 };
 
 const createAsset = asyncHandler(async (req, res) => {
@@ -26,6 +52,18 @@ const createAsset = asyncHandler(async (req, res) => {
   if (duplicate) {
     throw new ApiError(400, 'Duplicate asset code');
   }
+
+  if (payload.purchaseCost !== undefined && payload.purchaseCost !== '' && payload.purchaseCost !== null) {
+    const numericPurchase = Number(payload.purchaseCost);
+    if (!Number.isFinite(numericPurchase) || numericPurchase < 0) {
+      throw new ApiError(400, 'Purchase cost must be a non-negative number');
+    }
+    payload.purchaseCost = numericPurchase;
+  } else {
+    delete payload.purchaseCost;
+  }
+
+  validateAssetDates(payload);
 
   delete payload.publicId;
 
@@ -50,8 +88,18 @@ const createAsset = asyncHandler(async (req, res) => {
   res.status(201).json({ asset, publicUrl, qrCodeDataUrl });
 });
 
+const ASSET_SORTS = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+  name: { name: 1 },
+  'name-desc': { name: -1 },
+  code: { code: 1 },
+  status: { status: 1, name: 1 },
+  'next-service': { nextServiceDate: 1 },
+};
+
 const getAssets = asyncHandler(async (req, res) => {
-  const { search, status, category, location, assignedTechnician } = req.query;
+  const { search, status, category, location, assignedTechnician, sort } = req.query;
   const cacheKey = `assets:${JSON.stringify(req.query)}`;
   const cachedAssets = appCache.get(cacheKey);
 
@@ -77,7 +125,23 @@ const getAssets = asyncHandler(async (req, res) => {
     filter.assignedTechnician = assignedTechnician === 'unassigned' ? null : assignedTechnician;
   }
 
-  const assets = await Asset.find(filter).populate('assignedTechnician', 'name email role').sort({ createdAt: -1 });
+  // .lean() returns plain objects — required for caching (hydrated Mongoose
+  // documents must never go into the cache) and faster for a read-only list.
+  const assets = await Asset.find(filter)
+    .populate('assignedTechnician', 'name email role')
+    .sort(ASSET_SORTS[sort] || ASSET_SORTS.newest)
+    .lean();
+
+  // Total maintenance spend per asset (sum of all its issues' maintenance costs),
+  // so internal views can show running cost alongside the purchase cost.
+  const spend = await Issue.aggregate([
+    { $group: { _id: '$asset', total: { $sum: { $ifNull: ['$maintenanceCost', 0] } } } },
+  ]);
+  const spendByAsset = Object.fromEntries(spend.map((entry) => [String(entry._id), entry.total]));
+  assets.forEach((asset) => {
+    asset.maintenanceSpend = spendByAsset[String(asset._id)] || 0;
+  });
+
   appCache.set(cacheKey, assets);
 
   res.json({ assets });
@@ -103,6 +167,22 @@ const updateAsset = asyncHandler(async (req, res) => {
   }
 
   delete req.body.publicId;
+
+  if (req.body.purchaseCost !== undefined && req.body.purchaseCost !== '' && req.body.purchaseCost !== null) {
+    const numericPurchase = Number(req.body.purchaseCost);
+    if (!Number.isFinite(numericPurchase) || numericPurchase < 0) {
+      throw new ApiError(400, 'Purchase cost must be a non-negative number');
+    }
+    req.body.purchaseCost = numericPurchase;
+  }
+
+  // Validate against the merged (incoming + existing) values so a partial
+  // update can't sneak an invalid date combination past the rules.
+  validateAssetDates({
+    purchaseDate: req.body.purchaseDate ?? asset.purchaseDate,
+    lastServiceDate: req.body.lastServiceDate ?? asset.lastServiceDate,
+    nextServiceDate: req.body.nextServiceDate !== undefined ? req.body.nextServiceDate : undefined,
+  });
 
   if (req.body.code) {
     const duplicate = await Asset.findOne({ code: req.body.code.toUpperCase(), _id: { $ne: asset._id } });
@@ -168,6 +248,26 @@ const getPublicAssetQr = asyncHandler(async (req, res) => {
   res.json({ publicUrl, qrCodeDataUrl, publicId: asset.publicId });
 });
 
+// AI Asset Health Report — analyzes this asset's history + issues via Gemini.
+// Gracefully reports { available: false } when AI is not connected.
+const getAssetAiReport = asyncHandler(async (req, res) => {
+  const asset = await Asset.findById(req.params.id);
+  if (!asset) {
+    throw new ApiError(404, 'Asset not found');
+  }
+
+  const AssetHistory = require('../models/AssetHistory');
+  const { generateAssetHealthReport } = require('../services/triageService');
+
+  const [history, issues] = await Promise.all([
+    AssetHistory.find({ asset: asset._id }).sort({ createdAt: -1 }).limit(20).lean(),
+    Issue.find({ asset: asset._id }).select('title category status priority maintenanceCost createdAt').sort({ createdAt: -1 }).limit(15).lean(),
+  ]);
+
+  const result = await generateAssetHealthReport({ asset, history, issues });
+  res.json(result);
+});
+
 module.exports = {
   createAsset,
   getAssets,
@@ -176,4 +276,5 @@ module.exports = {
   getPublicAsset,
   getAssetQr,
   getPublicAssetQr,
+  getAssetAiReport,
 };

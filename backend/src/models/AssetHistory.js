@@ -61,4 +61,7 @@ assetHistorySchema.pre('replaceOne', function () {
   throw new Error('Asset history entries are immutable and cannot be replaced');
 });
 
+// Timeline reads are always per-asset, newest first.
+assetHistorySchema.index({ asset: 1, createdAt: -1 });
+
 module.exports = mongoose.model('AssetHistory', assetHistorySchema);

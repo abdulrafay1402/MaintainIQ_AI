@@ -8,10 +8,23 @@ const { canTransitionIssue, nextAssetStatusForIssueStatus } = require('../servic
 const { buildTriage, generateMaintenanceSummary } = require('../services/triageService');
 const { findAssetByIdentifier } = require('../utils/assetLookup');
 const { toReporterIssueView } = require('../utils/publicDtos');
-const { notifyAdmins, notifyUser } = require('../services/notificationService');
+const { notifyAdmins, notifyUser, notifySupervisors } = require('../services/notificationService');
 const { sendResolutionEmail } = require('../services/emailService');
 
 const buildIssueNumber = () => `ISU-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+// Issues in a terminal/settled state cannot be assigned, claimed, or have maintenance
+// recorded against them until they are explicitly reopened.
+const SETTLED_ISSUE_STATUSES = ['Resolved', 'Verified', 'Closed', 'Rejected', 'Cancelled'];
+
+// A technician whose supervisorCategories include the issue's category is that
+// department's supervisor: they review completed work (verify/close/reopen).
+const isSupervisorOf = (user, category) =>
+  user?.role === 'technician' && Array.isArray(user.supervisorCategories) && !!category && user.supervisorCategories.includes(category);
+
+// Supervisors act on the review stage of the lifecycle, not on active repair steps
+// (those belong to the assigned technician).
+const SUPERVISOR_ALLOWED_TARGETS = ['Verified', 'Closed', 'Reopened'];
 
 const addTimelineEntry = (issue, { fromStatus, toStatus, actor, actorName, note }) => {
   issue.timeline.push({ fromStatus, toStatus, actor, actorName, note });
@@ -26,8 +39,15 @@ const safeNotify = async (fn) => {
   }
 };
 
+const ISSUE_SORTS = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+  updated: { updatedAt: -1 },
+  status: { status: 1, createdAt: -1 },
+};
+
 const listIssues = asyncHandler(async (req, res) => {
-  const { status, priority, assignedTechnician, search, unassigned, category, location } = req.query;
+  const { status, priority, assignedTechnician, search, unassigned, category, location, sort } = req.query;
   const filter = {};
 
   if (req.user.role === 'technician') {
@@ -36,12 +56,21 @@ const listIssues = asyncHandler(async (req, res) => {
     } else {
       filter.assignedTechnician = req.user._id;
     }
-  } else {
+  } else if (req.user.role === 'admin') {
     if (unassigned === 'true') {
       filter.assignedTechnician = null;
-    } else if (assignedTechnician && req.user.role === 'admin') {
+    } else if (assignedTechnician) {
       filter.assignedTechnician = assignedTechnician === 'unassigned' ? null : assignedTechnician;
     }
+  } else {
+    // Students/reporters may only ever list their own reports here —
+    // authorization is enforced on the server, not by hiding frontend buttons.
+    filter.$and = [{
+      $or: [
+        { reporterId: req.user._id },
+        { reporterEmail: req.user.email },
+      ],
+    }];
   }
 
   if (status) filter.status = status;
@@ -64,7 +93,7 @@ const listIssues = asyncHandler(async (req, res) => {
     .populate('asset', 'name code category location status')
     .populate('assignedTechnician', 'name email role')
     .populate('reporterId', 'name email studentId')
-    .sort({ createdAt: -1 });
+    .sort(ISSUE_SORTS[sort] || ISSUE_SORTS.newest);
 
   res.json({ issues });
 });
@@ -105,18 +134,35 @@ const getIssueById = asyncHandler(async (req, res) => {
   const isAdmin = req.user.role === 'admin';
   const isAssignedTechnician = issue.assignedTechnician
     && issue.assignedTechnician._id.toString() === req.user._id.toString();
+  const isSupervisor = isSupervisorOf(req.user, issue.category);
   const isReporter = (issue.reporterId && issue.reporterId.toString() === req.user._id.toString())
     || (issue.reporterEmail && issue.reporterEmail.toLowerCase() === req.user.email.toLowerCase());
 
-  if (!isAdmin && !isAssignedTechnician && !isReporter) {
+  if (!isAdmin && !isAssignedTechnician && !isSupervisor && !isReporter) {
     throw new ApiError(403, 'You are not authorized to view this issue');
   }
 
-  if (isAdmin || isAssignedTechnician) {
+  if (isAdmin || isAssignedTechnician || isSupervisor) {
     return res.json({ issue });
   }
 
   res.json({ issue: toReporterIssueView(issue) });
+});
+
+// Supervisor team view: every issue in the categories this technician supervises,
+// used for review queues, team performance stats, and dashboard notifications.
+const listTeamIssues = asyncHandler(async (req, res) => {
+  const categories = req.user.supervisorCategories || [];
+  if (req.user.role !== 'technician' || categories.length === 0) {
+    throw new ApiError(403, 'Only supervisors can view the team queue');
+  }
+
+  const issues = await Issue.find({ category: { $in: categories } })
+    .populate('asset', 'name code category location status')
+    .populate('assignedTechnician', 'name email expertise')
+    .sort({ updatedAt: -1 });
+
+  res.json({ issues, categories });
 });
 
 const reportPublicIssue = asyncHandler(async (req, res) => {
@@ -125,6 +171,10 @@ const reportPublicIssue = asyncHandler(async (req, res) => {
 
   if (!asset) {
     throw new ApiError(404, 'Asset not found');
+  }
+
+  if (asset.status === 'Retired') {
+    throw new ApiError(400, 'This asset is retired. New issues cannot be reported against it.');
   }
 
   if (typeof aiSuggestion === 'string') {
@@ -203,6 +253,10 @@ const assignIssue = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Issue not found');
   }
 
+  if (SETTLED_ISSUE_STATUSES.includes(issue.status)) {
+    throw new ApiError(400, `Issue is ${issue.status} and cannot be ${isRelease ? 'released' : 'assigned'}. Reopen it first.`);
+  }
+
   if (isRelease) {
     const previousStatus = issue.status;
     issue.assignedTechnician = null;
@@ -248,6 +302,16 @@ const assignIssue = asyncHandler(async (req, res) => {
     relatedIssue: issue._id,
   }));
 
+  // The department supervisor tracks what their team is working on.
+  await safeNotify(() => notifySupervisors({
+    category: issue.category,
+    excludeUserId: technician._id,
+    type: 'team_assignment',
+    title: `Team assignment: ${issue.issueNumber}`,
+    message: `${technician.name} was assigned "${issue.title}" (${issue.assetCode}) in your department (${issue.category}).`,
+    relatedIssue: issue._id,
+  }));
+
   const asset = await Asset.findById(issue.asset);
   if (asset) {
     asset.assignedTechnician = technicianId;
@@ -280,9 +344,20 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
 
   const isAdmin = req.user.role === 'admin';
   const isAssignedTechnician = issue.assignedTechnician && issue.assignedTechnician.toString() === req.user._id.toString();
+  const isSupervisor = isSupervisorOf(req.user, issue.category);
 
-  if (!isAdmin && !isAssignedTechnician) {
+  if (!isAdmin && !isAssignedTechnician && !isSupervisor) {
     throw new ApiError(403, 'You can only update issues assigned to you');
+  }
+
+  // Supervisors (when not the assigned technician) only review completed work.
+  if (isSupervisor && !isAdmin && !isAssignedTechnician && !SUPERVISOR_ALLOWED_TARGETS.includes(status)) {
+    throw new ApiError(403, 'Supervisors can only verify, close, or reopen issues in their department');
+  }
+
+  // Reopening is a review decision: only an admin or the department supervisor may do it.
+  if (status === 'Reopened' && !isAdmin && !isSupervisor) {
+    throw new ApiError(403, 'Only an admin or the department supervisor can reopen an issue');
   }
 
   if (!canTransitionIssue(issue.status, status)) {
@@ -295,8 +370,14 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
 
   const previousStatus = issue.status;
   issue.status = status;
-  if (note) {
+  // The note always lands in the timeline entry below; maintenanceNotes is only
+  // set on resolution so a later status note can't clobber the maintenance record.
+  if (note && status === 'Resolved') {
     issue.maintenanceNotes = note;
+  }
+  if (status === 'Inspection Started' && !issue.inspectionStartedAt) {
+    // Recorded so the maintenance form can auto-fill the real work-start date.
+    issue.inspectionStartedAt = new Date();
   }
   if (status === 'Resolved') {
     issue.resolvedAt = new Date();
@@ -340,6 +421,27 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
         resolutionNote: note || issue.maintenanceNotes || null,
       }));
     }
+
+    // The department supervisor reviews completed work (verify / reopen).
+    await safeNotify(() => notifySupervisors({
+      category: issue.category,
+      excludeUserId: req.user._id,
+      type: 'team_resolution',
+      title: `Ready for review: ${issue.issueNumber}`,
+      message: `"${issue.title}" (${issue.assetCode}) was resolved by ${req.user.name}. Please review and verify or reopen.`,
+      relatedIssue: issue._id,
+    }));
+  }
+
+  // Reopened work goes straight back to the assigned technician's attention.
+  if (status === 'Reopened' && issue.assignedTechnician) {
+    await safeNotify(() => notifyUser({
+      userId: issue.assignedTechnician,
+      type: 'issue_reopened',
+      title: `Issue reopened: ${issue.issueNumber}`,
+      message: `"${issue.title}" (${issue.assetCode}) was reopened by ${req.user.name}${note ? `: ${note}` : '.'}`,
+      relatedIssue: issue._id,
+    }));
   }
 
   if (asset) {
@@ -372,11 +474,34 @@ const updateIssueStatus = asyncHandler(async (req, res) => {
 });
 
 const addMaintenanceRecord = asyncHandler(async (req, res) => {
-  const { notes, partsUsed = [], cost = 0, startedAt, completedAt, nextServiceDate, evidence = [], inspectionFindings = '', workPerformed = '', finalCondition = 'Good', durationHours = 1 } = req.body;
+  let { notes, partsUsed = [], cost = 0, startedAt, completedAt, nextServiceDate, evidence = [], inspectionFindings = '', workPerformed = '', finalCondition = 'Good', durationHours = 1 } = req.body;
   const issue = await Issue.findById(req.params.id);
   if (!issue) {
     throw new ApiError(404, 'Issue not found');
   }
+
+  // This endpoint accepts multipart/form-data (evidence photos), so structured
+  // fields may arrive as JSON strings — normalize them first.
+  if (typeof partsUsed === 'string') {
+    try {
+      partsUsed = JSON.parse(partsUsed);
+    } catch {
+      throw new ApiError(400, 'partsUsed must be a valid JSON array');
+    }
+  }
+  if (typeof evidence === 'string') {
+    try {
+      evidence = JSON.parse(evidence);
+    } catch {
+      evidence = evidence ? [evidence] : [];
+    }
+  }
+  if (!Array.isArray(partsUsed)) partsUsed = [];
+  if (!Array.isArray(evidence)) evidence = [];
+
+  // Photos uploaded by the technician as proof of the completed work.
+  const uploadedEvidence = (req.files || []).map((file) => file.path);
+  const evidenceUrls = [...uploadedEvidence, ...evidence];
 
   const isAdmin = req.user.role === 'admin';
   const isAssignedTechnician = issue.assignedTechnician
@@ -386,18 +511,61 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'Only the assigned technician or an admin can record maintenance for this issue');
   }
 
+  if (SETTLED_ISSUE_STATUSES.includes(issue.status)) {
+    throw new ApiError(400, `Issue is already ${issue.status}. Reopen it before recording new maintenance.`);
+  }
+
   const previousStatus = issue.status;
 
   if (!notes) {
     throw new ApiError(400, 'Maintenance notes are required');
   }
 
-  if (Number(cost) < 0) {
-    throw new ApiError(400, 'Maintenance cost cannot be negative');
+  // Normalize parts: every entry becomes { name, quantity, cost } with numeric,
+  // non-negative values; the parts subtotal is computed server-side so the stored
+  // totals are always consistent with the line items.
+  const cleanParts = partsUsed
+    .map((part) => ({
+      name: String(part?.name || '').trim(),
+      quantity: Number(part?.quantity),
+      cost: Number(part?.cost),
+    }))
+    .filter((part) => part.name);
+
+  if (cleanParts.some((part) => !Number.isFinite(part.quantity) || part.quantity <= 0 || !Number.isFinite(part.cost) || part.cost < 0)) {
+    throw new ApiError(400, 'Every part needs a positive quantity and a non-negative cost');
+  }
+
+  const partsSubtotal = cleanParts.reduce((sum, part) => sum + part.quantity * part.cost, 0);
+
+  // Grand total defaults to the parts subtotal when not supplied explicitly,
+  // and can never be less than the parts it includes.
+  const numericCost = cost === undefined || cost === null || cost === '' ? partsSubtotal : Number(cost);
+  if (!Number.isFinite(numericCost) || numericCost < 0) {
+    throw new ApiError(400, 'Maintenance cost must be a valid non-negative number');
+  }
+  if (numericCost < partsSubtotal) {
+    throw new ApiError(400, `Total cost (${numericCost}) cannot be less than the parts subtotal (${partsSubtotal})`);
   }
 
   if (!completedAt) {
     throw new ApiError(400, 'Maintenance completion date is required');
+  }
+
+  const { endOfToday } = require('../utils/validators');
+
+  // Work can only be logged as done today or earlier — never in the future.
+  if (new Date(completedAt) > endOfToday()) {
+    throw new ApiError(400, 'Completion date cannot be in the future — it must be today or earlier');
+  }
+
+  if (startedAt && new Date(startedAt) > new Date(completedAt)) {
+    throw new ApiError(400, 'Maintenance start date cannot be after the completion date');
+  }
+
+  // The next service must be scheduled for a future day.
+  if (nextServiceDate && new Date(nextServiceDate) <= endOfToday()) {
+    throw new ApiError(400, 'Next service date must be after today');
   }
 
   if (nextServiceDate && new Date(nextServiceDate) < new Date(completedAt)) {
@@ -405,8 +573,9 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
   }
 
   issue.maintenanceNotes = notes;
-  issue.partsUsed = partsUsed;
-  issue.maintenanceCost = Number(cost);
+  issue.partsUsed = cleanParts;
+  issue.maintenanceCost = numericCost;
+  issue.maintenanceEvidence = evidenceUrls;
   issue.status = 'Resolved';
   issue.resolvedAt = new Date(completedAt);
   issue.inspectionFindings = inspectionFindings;
@@ -443,12 +612,12 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     asset: issue.asset,
     technician: req.user._id,
     notes,
-    partsUsed,
-    cost,
+    partsUsed: cleanParts,
+    cost: numericCost,
     startedAt,
     completedAt,
     nextServiceDate,
-    evidence,
+    evidence: evidenceUrls,
     inspectionFindings,
     workPerformed,
     finalCondition,
@@ -487,18 +656,38 @@ const addMaintenanceRecord = asyncHandler(async (req, res) => {
     }));
   }
 
+  // The department supervisor reviews completed maintenance (verify / reopen).
+  await safeNotify(() => notifySupervisors({
+    category: issue.category,
+    excludeUserId: req.user._id,
+    type: 'team_resolution',
+    title: `Ready for review: ${issue.issueNumber}`,
+    message: `${req.user.name} recorded maintenance and resolved "${issue.title}" (${issue.assetCode}). Please review and verify or reopen.`,
+    relatedIssue: issue._id,
+  }));
+
   res.status(201).json({ maintenanceRecord, issue });
 });
 
 const triageIssue = asyncHandler(async (req, res) => {
   const { assetCode, complaint } = req.body;
+
+  if (!complaint || !complaint.trim()) {
+    throw new ApiError(400, 'Complaint text is required for AI triage');
+  }
+
   const asset = await findAssetByIdentifier(assetCode);
 
   if (!asset) {
     throw new ApiError(404, 'Asset not found');
   }
 
-  const suggestion = await buildTriage({ asset, complaint });
+  const recentIssues = await Issue.find({ asset: asset._id })
+    .select('title category status createdAt')
+    .sort({ createdAt: -1 })
+    .limit(10);
+
+  const suggestion = await buildTriage({ asset, complaint, recentIssues });
   res.json({ suggestion });
 });
 
@@ -512,6 +701,10 @@ const claimIssue = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Issue is already assigned to a technician');
   }
 
+  if (SETTLED_ISSUE_STATUSES.includes(issue.status)) {
+    throw new ApiError(400, `Issue is ${issue.status} and cannot be claimed. Reopen it first.`);
+  }
+
   const previousStatus = issue.status;
   issue.assignedTechnician = req.user._id;
   issue.status = 'Assigned';
@@ -521,7 +714,7 @@ const claimIssue = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(issue.asset);
   if (asset) {
     asset.assignedTechnician = req.user._id;
-    asset.status = 'Under Inspection';
+    asset.status = nextAssetStatusForIssueStatus('Assigned');
     await asset.save();
   }
 
@@ -576,6 +769,7 @@ module.exports = {
   listIssues,
   listMyIssues,
   listAssignedIssues,
+  listTeamIssues,
   getIssueById,
   reportPublicIssue,
   assignIssue,

@@ -4,7 +4,8 @@ const ThemeContext = createContext(null);
 const STORAGE_KEY = 'maintainiq-theme';
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE_KEY) || 'light');
+  // Dark is the signature MaintainIQ look — first-time visitors land on it.
+  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE_KEY) || 'dark');
 
   useEffect(() => {
     const root = document.documentElement;

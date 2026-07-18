@@ -38,14 +38,17 @@ Run the seed script after connecting MongoDB:
 
 ```bash
 cd backend
-npm run seed
+npm run seed            # idempotent — adds demo users/assets, keeps existing data
+npm run seed -- --fresh # wipes assets/issues/history first, then seeds a full demo dataset
 ```
 
-Seeded credentials:
+Seeded credentials (pre-verified, no OTP email needed):
 
 - Admin: `admin@maintainiq.local` / `Admin@123`
 - Technician: `tech@maintainiq.local` / `Tech@123` (expertise: Electronics / IT, Electrical)
-- Students self-register from the Sign up page
+- Technician: `tech2@maintainiq.local` / `Tech@123` (expertise: HVAC, Plumbing)
+- Student: `student@maintainiq.local` / `Student@123`
+- Students can also self-register from the Sign up page (staff accounts are onboarded by an admin only)
 
 ## Setup
 
@@ -68,8 +71,21 @@ Or from the repo root: `npm run dev` starts both.
 5. Technician starts inspection → records damaged HDMI cable, replacement part, cost, duration → resolves.
 6. Asset returns to Operational, service dates update, permanent history and the issue timeline record everything, and the AI maintenance summary + preventive recommendation appear.
 
+## Deployment (Vercel)
+
+Both apps deploy to Vercel. **These environment variables are mandatory in production:**
+
+| App | Variable | Value |
+|---|---|---|
+| Frontend | `VITE_API_URL` | `https://<your-backend>.vercel.app/api` |
+| Backend | `CLIENT_URL` | `https://<your-frontend>.vercel.app` (drives QR codes **and** CORS) |
+| Backend | `MONGODB_URI`, `JWT_SECRET`, `CLOUDINARY_*` | same as local |
+| Backend | `GEMINI_API_KEY` | free key from https://aistudio.google.com/apikey |
+| Backend | `SMTP_USER`, `SMTP_PASS` | Gmail app password for OTP/notification emails |
+
 ## Notes
 
-- Evidence images are stored on the server's local disk and served from `/uploads` (swap in Cloudinary/S3 by replacing `backend/src/middleware/upload.js`).
+- Evidence images are uploaded to Cloudinary via `backend/src/middleware/upload.js` (5 images max, 5MB each, images only — validated server-side).
 - Public asset pages and reporter issue views use dedicated safe DTOs so private fields can never leak.
-- `API.md` documents every endpoint, filter, and business rule.
+- AI triage understands English, Urdu, and Roman Urdu complaints, includes a recurring-failure warning built from the asset's history, and falls back to a rule-based classifier if Gemini is unavailable (8s timeout).
+- The issue workflow (`Reported → Assigned → Inspection Started → …`) is enforced server-side; the UI only offers legal next transitions.

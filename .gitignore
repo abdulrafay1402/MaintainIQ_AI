@@ -1,7 +1,23 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment secrets — NEVER commit these
 .env
 .env.local
-dist
-build
-coverage
+.env.*.local
+
+# Build output
+dist/
+build/
+coverage/
+
+# Vercel local config
+.vercel/
+
+# Logs & OS junk
+*.log
 .DS_Store
+Thumbs.db
+
+# Temp/scratch files
+*.tmp.js

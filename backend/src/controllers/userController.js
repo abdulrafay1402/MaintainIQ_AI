@@ -2,22 +2,187 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
+const { sendEmail } = require('../services/emailService');
+const { isValidEmail, isValidPhone } = require('../utils/validators');
+const { notifyUser } = require('../services/notificationService');
 
+const EXPERTISE_OPTIONS = ['Electronics / IT', 'Electrical', 'HVAC / Air Conditioning', 'Plumbing', 'Mechanical / Furniture', 'Safety & Security', 'Lab Equipment'];
+
+// Technicians can see each other (team directory); admins see everything.
+// NOTE: pre-existing documents have no approvalStatus field, so the filter must
+// use $nin (missing field = approved) instead of matching 'approved' directly.
 const getTechnicians = asyncHandler(async (req, res) => {
-  const technicians = await User.find({ role: 'technician', isActive: true }).select('name email role expertise createdAt');
+  const technicians = await User.find({ role: 'technician', isActive: true, approvalStatus: { $nin: ['pending', 'rejected'] } })
+    .select('name email role expertise supervisorCategories department createdAt');
   res.json({ technicians });
 });
 
 const getUsers = asyncHandler(async (req, res) => {
-  const users = await User.find({ isActive: true }).select('name email role createdAt');
+  // Deactivated accounts stay visible (flagged) so the admin can reactivate them.
+  const users = await User.find({ approvalStatus: { $nin: ['pending', 'rejected'] } })
+    .select('name email role expertise supervisorCategories studentId department phone isActive createdAt');
   res.json({ users });
 });
 
+// Guards shared by deactivate/delete: admins can only manage technician and
+// student accounts, and can never act on themselves or another admin.
+const getManagedUser = async (req) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  if (user._id.toString() === req.user._id.toString()) {
+    throw new ApiError(400, 'You cannot perform this action on your own account');
+  }
+  if (user.role === 'admin') {
+    throw new ApiError(403, 'Admin accounts cannot be removed from here');
+  }
+  return user;
+};
+
+const setUserActive = asyncHandler(async (req, res) => {
+  const { isActive } = req.body;
+  if (typeof isActive !== 'boolean') {
+    throw new ApiError(400, 'isActive must be true or false');
+  }
+
+  const user = await getManagedUser(req);
+  user.isActive = isActive;
+  await user.save();
+
+  sendEmail({
+    to: user.email,
+    subject: isActive ? 'MaintainIQ — Account Reactivated' : 'MaintainIQ — Account Deactivated',
+    text: isActive
+      ? `Hello ${user.name},\n\nYour MaintainIQ account has been reactivated by the administrator. You can log in again.\n\nBest regards,\nMaintainIQ Team`
+      : `Hello ${user.name},\n\nYour MaintainIQ account has been deactivated by the administrator. Contact support if you believe this is a mistake.\n\nBest regards,\nMaintainIQ Team`,
+  }).catch((err) => console.error('Active-status email failed:', err.message));
+
+  res.json({
+    message: isActive ? `${user.name} account reactivated` : `${user.name} account deactivated`,
+    user: { id: user._id, name: user.name, isActive: user.isActive },
+  });
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  const user = await getManagedUser(req);
+
+  // Clean up references so nothing dangles:
+  // active work goes back to the shared pool, assets lose the default technician,
+  // and the account's notifications are removed. Settled issues and history keep
+  // their recorded names, so the audit trail stays intact.
+  const Issue = require('../models/Issue');
+  const Asset = require('../models/Asset');
+  const Notification = require('../models/Notification');
+  const SETTLED = ['Resolved', 'Verified', 'Closed', 'Rejected', 'Cancelled'];
+
+  if (user.role === 'technician') {
+    await Issue.updateMany(
+      { assignedTechnician: user._id, status: { $nin: SETTLED } },
+      { $set: { assignedTechnician: null } }
+    );
+    await Asset.updateMany({ assignedTechnician: user._id }, { $set: { assignedTechnician: null } });
+  }
+  await Notification.deleteMany({ user: user._id });
+
+  await User.deleteOne({ _id: user._id });
+
+  res.json({ message: `${user.name} (${user.role}) permanently deleted` });
+});
+
+// Self-registered accounts waiting for an admin decision.
+const getPendingUsers = asyncHandler(async (req, res) => {
+  const pending = await User.find({ approvalStatus: 'pending' })
+    .select('name email role expertise studentId isVerified createdAt')
+    .sort({ createdAt: -1 });
+  res.json({ pending });
+});
+
+const decideApproval = asyncHandler(async (req, res) => {
+  const { action } = req.body;
+
+  if (!['approve', 'reject'].includes(action)) {
+    throw new ApiError(400, 'Action must be "approve" or "reject"');
+  }
+
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  if (user.approvalStatus !== 'pending') {
+    throw new ApiError(400, `This account is already ${user.approvalStatus}`);
+  }
+
+  user.approvalStatus = action === 'approve' ? 'approved' : 'rejected';
+  await user.save();
+
+  sendEmail({
+    to: user.email,
+    subject: action === 'approve' ? 'MaintainIQ — Account Approved' : 'MaintainIQ — Account Request Update',
+    text: action === 'approve'
+      ? `Hello ${user.name},\n\nYour MaintainIQ ${user.role} account has been approved by the administrator. You can now log in.\n\nBest regards,\nMaintainIQ Team`
+      : `Hello ${user.name},\n\nUnfortunately your MaintainIQ signup request was not approved at this time.\n\nBest regards,\nMaintainIQ Team`,
+  }).catch((err) => console.error('Approval email failed:', err.message));
+
+  res.json({
+    message: action === 'approve' ? 'Account approved' : 'Account rejected',
+    user: { id: user._id, name: user.name, email: user.email, role: user.role, approvalStatus: user.approvalStatus },
+  });
+});
+
+// Admin promotes/demotes a technician to supervisor of one or more categories.
+const setSupervisorCategories = asyncHandler(async (req, res) => {
+  const { categories } = req.body;
+
+  if (!Array.isArray(categories)) {
+    throw new ApiError(400, 'categories must be an array');
+  }
+
+  const clean = categories.filter((c) => EXPERTISE_OPTIONS.includes(c));
+  if (clean.length !== categories.length) {
+    throw new ApiError(400, 'One or more categories are invalid');
+  }
+
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  if (user.role !== 'technician') {
+    throw new ApiError(400, 'Only technicians can be made supervisors');
+  }
+
+  user.supervisorCategories = clean;
+  await user.save();
+
+  try {
+    await notifyUser({
+      userId: user._id,
+      type: 'supervisor_update',
+      title: clean.length ? 'You are now a supervisor' : 'Supervisor role removed',
+      message: clean.length
+        ? `You are now the supervisor for: ${clean.join(', ')}. You can verify, close, and reopen resolved work in these departments.`
+        : 'Your supervisor rights have been removed by the administrator.',
+    });
+  } catch (error) {
+    console.error('Supervisor notification failed:', error.message);
+  }
+
+  res.json({
+    message: 'Supervisor categories updated',
+    user: { id: user._id, name: user.name, supervisorCategories: user.supervisorCategories },
+  });
+});
+
 const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, expertise } = req.body;
+  const { name, email, password, role, expertise, supervisorCategories } = req.body;
 
   if (!name || !email || !password) {
     throw new ApiError(400, 'Name, email, and password are required');
+  }
+
+  if (!isValidEmail(email)) {
+    throw new ApiError(400, 'Please provide a valid email address');
   }
 
   if (!['admin', 'technician'].includes(role)) {
@@ -33,6 +198,13 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Email already registered');
   }
 
+  const cleanExpertise = role === 'technician' && Array.isArray(expertise)
+    ? expertise.filter((tag) => EXPERTISE_OPTIONS.includes(tag))
+    : [];
+  const cleanSupervisor = role === 'technician' && Array.isArray(supervisorCategories)
+    ? supervisorCategories.filter((tag) => EXPERTISE_OPTIONS.includes(tag))
+    : [];
+
   const hashedPassword = await bcrypt.hash(password, 10);
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const otpExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // Admin created OTP expires in 24h
@@ -42,15 +214,18 @@ const createUser = asyncHandler(async (req, res) => {
     email,
     password: hashedPassword,
     role,
-    expertise: Array.isArray(expertise) ? expertise : [],
+    expertise: cleanExpertise,
+    supervisorCategories: cleanSupervisor,
     isActive: true,
     isVerified: false,
+    // Admin-onboarded accounts do not go through the approval queue.
+    approvalStatus: 'approved',
     verificationCode: otp,
     verificationCodeExpires: otpExpires,
   });
 
-  const { sendEmail } = require('../services/emailService');
-  sendEmail({
+  // Awaited so the credentials email isn't lost when the serverless function freezes after responding.
+  const emailSent = await sendEmail({
     to: user.email,
     subject: 'MaintainIQ Account Created',
     text: `Hello ${user.name},\n\nAn administrator has created your MaintainIQ ${role} account. Here are your credentials:\n\nEmail: ${user.email}\nPassword: ${password}\n\nYour 2-Factor verification code is: ${otp}\n\nPlease enter this code on your first login.\n\nBest regards,\nMaintainIQ Team`,
@@ -71,15 +246,20 @@ const createUser = asyncHandler(async (req, res) => {
         <p style="color: #5F7F8C; font-size: 12px; text-align: center;">© 2026 MaintainIQ. All rights reserved.</p>
       </div>
     `,
-  }).catch((err) => console.error('Failed to send admin onboard verification email:', err.message));
+  }).catch((err) => {
+    console.error('Failed to send admin onboard verification email:', err.message);
+    return false;
+  });
 
   res.status(201).json({
+    emailSent: !!emailSent,
     user: {
       id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
       expertise: user.expertise,
+      supervisorCategories: user.supervisorCategories,
     },
   });
 });
@@ -92,9 +272,13 @@ const updateProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'User not found');
   }
 
-  if (name) user.name = name;
-  if (phone !== undefined) user.phone = phone.trim();
-  if (department !== undefined) user.department = department.trim();
+  if (phone !== undefined && String(phone).trim() && !isValidPhone(String(phone))) {
+    throw new ApiError(400, 'Phone must be 12 digits starting with 92 (e.g. 923001234567) or 11 digits starting with 0 (e.g. 03001234567)');
+  }
+
+  if (name) user.name = String(name).trim();
+  if (phone !== undefined) user.phone = String(phone).trim();
+  if (department !== undefined) user.department = String(department).trim();
   if (twoFactorEnabled !== undefined) user.twoFactorEnabled = !!twoFactorEnabled;
 
   await user.save();
@@ -109,6 +293,9 @@ const updateProfile = asyncHandler(async (req, res) => {
       phone: user.phone,
       department: user.department,
       twoFactorEnabled: user.twoFactorEnabled,
+      studentId: user.studentId,
+      expertise: user.expertise,
+      supervisorCategories: user.supervisorCategories,
     },
   });
 });
@@ -141,4 +328,15 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ message: 'Password updated successfully' });
 });
 
-module.exports = { getTechnicians, getUsers, createUser, updateProfile, changePassword };
+module.exports = {
+  getTechnicians,
+  getUsers,
+  getPendingUsers,
+  decideApproval,
+  setSupervisorCategories,
+  setUserActive,
+  deleteUser,
+  createUser,
+  updateProfile,
+  changePassword,
+};

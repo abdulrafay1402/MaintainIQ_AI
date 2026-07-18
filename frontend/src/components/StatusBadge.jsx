@@ -25,6 +25,11 @@ const STATUS_STYLES = {
   Pending: 'bg-amber-50 text-amber-700 ring-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20',
   Accepted: 'bg-sky-50 text-sky-700 ring-sky-200/50 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20',
   'In Progress': 'bg-orange-50 text-orange-700 ring-orange-200/50 dark:bg-orange-500/10 dark:text-orange-400 dark:ring-orange-500/20',
+
+  // Asset conditions — a healthy asset must not render as a pulsing warning
+  Good: 'bg-emerald-50 text-emerald-700 ring-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20',
+  Fair: 'bg-amber-50 text-amber-700 ring-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20',
+  Poor: 'bg-rose-50 text-rose-700 ring-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/20',
 };
 
 const DOT_COLORS = {
@@ -34,6 +39,9 @@ const DOT_COLORS = {
   Retired: 'bg-slate-400',
   Closed: 'bg-slate-400',
   Cancelled: 'bg-slate-400',
+  Good: 'bg-emerald-500',
+  Fair: 'bg-amber-500',
+  Poor: 'bg-rose-500',
 };
 
 export default function StatusBadge({ value }) {

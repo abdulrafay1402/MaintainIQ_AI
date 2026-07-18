@@ -75,6 +75,12 @@ const assetSchema = new mongoose.Schema(
     purchaseDate: {
       type: Date,
     },
+    // What the asset cost to buy — combined with maintenance spend it gives
+    // the total cost of ownership shown on internal equipment views.
+    purchaseCost: {
+      type: Number,
+      min: 0,
+    },
     lastServiceDate: {
       type: Date,
     },
